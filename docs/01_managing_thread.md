@@ -1,7 +1,7 @@
 ## [std::thread](https://en.cppreference.com/w/cpp/thread/thread)
 
-* 每个程序有一个执行 main() 函数的主线程，将函数添加为 [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 的参数即可启动另一个线程，两个线程会同时运行
-
+* 각 응용 프로그램에는 main() 함수를 실행하는 메인 스레드가 있다. 다른 스레드를 시작하려면 [std::thread] (https://en.cppreference.com/w/cpp/thread/thread) 에 함수를 인수로 추가하면 두 스레드가 동시에 실행된다.  
+  
 ```cpp
 #include <iostream>
 #include <thread>
@@ -14,7 +14,7 @@ int main() {
 }
 ```
 
-* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 的参数也可以是函数对象或者 lambda
+* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 는 함수 객체 또는 lambda
 
 ```cpp
 #include <iostream>
@@ -26,8 +26,8 @@ struct A {
 
 int main() {
   A a;
-  std::thread t1(a);  // 会调用 A 的拷贝构造函数
-  std::thread t2(A());  // most vexing parse，声明名为 t2 参数类型为 A 的函数
+  std::thread t1(a);  // A에 대한 복사 생성자를 호출한다
+  std::thread t2(A());  // 가장 까다로운 구문 분석으로 A 타입의 매개 변수를 가진 t2를 선언한다
   std::thread t3{A()};
   std::thread t4((A()));
   std::thread t5{[] { std::cout << 1; }};
@@ -37,9 +37,9 @@ int main() {
   t5.join();
 }
 ```
-
-* 在线程销毁前要对其调用 [join](https://en.cppreference.com/w/cpp/thread/thread/join) 等待线程退出或 [detach](https://en.cppreference.com/w/cpp/thread/thread/detach) 将线程分离，否则 [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 的析构函数会调用 [std::terminate](https://en.cppreference.com/w/cpp/error/terminate) 终止程序，注意分离线程可能出现空悬引用的隐患
-
+  
+* [join](https://en.cppreference.com/w/cpp/thread/thread/join )을 호출하여 스레드가 종료될 때까지 기다리거나 [detach](https://en.cppreference.com/w/cpp/thread/ )를 호출하여 스레드를 분리한 후 소멸시킨다. 그렇지 않으면 [std::thread](https://en.cppreference.com/w/cpp/thread/thread )의 소멸자가 [std::terminate](https://en.cppreference.com/w/cpp/error/terminate )를 호출하여 스레드를 종료한다.  분리된 스레드는 널 참조를 가질 수 있다는 점에 유의한다.  
+  
 ```cpp
 #include <iostream>
 #include <thread>
@@ -50,7 +50,7 @@ class A {
 
   void operator()() const {
     for (int i = 0; i < 1000000; ++i) {
-      call(x_);  // 存在对象析构后引用空悬的隐患
+      call(x_);  // 오브젝트 디스트럭처링 후 참조 무효화의 숨겨진 위험이 있습니다
     }
   }
 
@@ -65,28 +65,28 @@ void f() {
   int x = 0;
   A a{x};
   std::thread t{a};
-  t.detach();  // 不等待 t 结束
-}  // 函数结束后 t 可能还在运行，而 x 已经销毁，a.x_ 为空悬引用
+  t.detach();  // t가 끝날 때까지 기다리지 않는다
+}  // 함수가 완료되고 x가 소멸되었을 때 t가 여전히 실행 중일 수 있으며, a.x_는 널 댕글링 참조한다
 
 int main() {
-  std::thread t{f};  // 导致空悬引用
+  std::thread t{f};  // 원인 댕글링 참조
   t.join();
 }
 ```
-
-* [join](https://en.cppreference.com/w/cpp/thread/thread/join) 会在线程结束后清理 [std::thread](https://en.cppreference.com/w/cpp/thread/thread)，使其与完成的线程不再关联，因此对一个线程只能进行一次 [join](https://en.cppreference.com/w/cpp/thread/thread/join)
-
+  
+* [join](https://en.cppreference.com/w/cpp/thread/thread/join )은 [std::thread](https://en.cppreference.com/w/cpp/thread/thread )를 정리하여 완료된 스레드와 더 이상 연결되지 않도록 하므로 [join](https://en.cppreference.com/w/cpp/thread/thread/join )은 스레드에 대해 한 번만 수행할 수 있다.  
+    
 ```cpp
 #include <thread>
 
 int main() {
   std::thread t([] {});
   t.join();
-  t.join();  // 错误
+  t.join();  // 오류
 }
 ```
-
-* 如果线程运行过程中发生异常，之后的 [join](https://en.cppreference.com/w/cpp/thread/thread/join) 会被忽略，为此需要捕获异常，并在抛出异常前 [join](https://en.cppreference.com/w/cpp/thread/thread/join)
+  
+* 스레드가 실행되는 동안 예외가 발생하면 후속 [join](https://en.cppreference.com/w/cpp/thread/thread/join) 은 무시되므로 예외를 잡아서 [join](https://en.cppreference.com/w/cpp/thread/thread/join)
 
 ```cpp
 #include <thread>
@@ -96,15 +96,15 @@ int main() {
   try {
     throw 0;
   } catch (int x) {
-    t.join();  // 处理异常前先 join()
-    throw x;   // 再将异常抛出
+    t.join();  
+    throw x;   
   }
-  t.join();  // 之前抛异常，不会执行到此处
+  t.join();  // 이전에 예외를 던진 경우 여기서는 예외가 실행되지 않는다
 }
-```
-
-* C++20 提供了 [std::jthread](https://en.cppreference.com/w/cpp/thread/jthread)，它会在析构函数中对线程 [join](https://en.cppreference.com/w/cpp/thread/thread/join)
-
+```  
+  
+* C++20 지원 [std::jthread](https://en.cppreference.com/w/cpp/thread/jthread)，소멸자 함수에 스레드를 [join](https://en.cppreference.com/w/cpp/thread/thread/join) 한다  
+  
 ```cpp
 #include <thread>
 
@@ -113,21 +113,23 @@ int main() {
 }
 ```
 
-* [detach](https://en.cppreference.com/w/cpp/thread/thread/detach) 分离线程会让线程在后台运行，一般将这种在后台运行的线程称为守护线程，守护线程与主线程无法直接交互，也不能被 [join](https://en.cppreference.com/w/cpp/thread/thread/join)
-
+* [detach](https://en.cppreference.com/w/cpp/thread/thread/detach) 스레드를 분리하면 백그라운드에서 실행 중인 스레드가 남게 되며, 백그라운드에서 실행 중인 스레드를 일반적으로 데몬 스레드라고 하며, 이는 메인 스레드와 직접 상호 작용할 수 없다. [join](https://en.cppreference.com/w/cpp/thread/thread/join) 할 수 없다.  
+  
 ```cpp
 std::thread t([] {});
 t.detach();
 assert(!t.joinable());
 ```
-
-* 创建守护线程一般是为了长时间运行，比如有一个文档处理应用，为了同时编辑多个文档，每次新开一个文档，就可以开一个对应的守护线程
-
+   
+* 예를 들어 문서 처리 애플리케이션이 있는 경우 여러 문서를 동시에 편집하기 위해 새 문서를 열 때마다 해당 데몬 스레드를 열 수 있는 등 데몬 스레드 생성은 일반적으로 오랜 기간 동안 수행된다.  
+  
 ```cpp
 void edit_document(const std::string& filename) {
   open_document_and_display_gui(filename);
+
   while (!done_editing()) {
     user_command cmd = get_user_input();
+    
     if (cmd.type == open_new_document) {
       const std::string new_name = get_filename_from_user();
       std::thread t(edit_document, new_name);
@@ -137,24 +139,24 @@ void edit_document(const std::string& filename) {
     }
   }
 }
-```
+```  
+  
+## 인자가 있는 함수에 대한 스레드 만들기
 
-## 为带参数的函数创建线程
-
-* 有参数的函数也能传给 [std::thread](https://en.cppreference.com/w/cpp/thread/thread)，参数的默认实参会被忽略
-
+* 인자가 있는 함수는 [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 로 전달할 수도 있으며, 인자의 기본 실수 매개 변수는 무시된다.  
+  
 ```cpp
 #include <thread>
 
 void f(int i = 1) {}
 
 int main() {
-  std::thread t{f, 42};  // std::thread t{f} 则会出错，因为默认实参会被忽略
+  std::thread t{f, 42};  // std::thread t{f} 는 기본 실제 매개 변수가 무시되므로 오류가 발생한다. f 함수에서 파라미터 i를 사용하지 않고 있다
   t.join();
 }
 ```
 
-* 参数的引用类型也会被忽略，为此要使用 [std::ref](https://en.cppreference.com/w/cpp/utility/functional/ref)
+* 매개 변수의 참조 유형도 무시되며, 이를 위해서는 [std::ref](https://en.cppreference.com/w/cpp/utility/functional/ref)
 
 ```cpp
 #include <cassert>
@@ -170,8 +172,8 @@ int main() {
 }
 ```
 
-* 如果对一个实例的 non-static 成员函数创建线程，第一个参数类型为成员函数指针，第二个参数类型为实例指针，后续参数为函数参数
-
+* 인스턴스의 비정적 멤버 함수에 대해 스레드가 생성되는 경우, 첫 번째 인자는 멤버 함수 포인터 유형이고, 두 번째 인자는 인스턴스 포인터 유형이며, 후속 인자는 함수 매개 변수입니다.  
+  
 ```cpp
 #include <iostream>
 #include <thread>
@@ -183,15 +185,15 @@ class A {
 
 int main() {
   A a;
-  std::thread t1{&A::f, &a, 42};  // 调用 a->f(42)
-  std::thread t2{&A::f, a, 42};   // 拷贝构造 tmp_a，再调用 tmp_a.f(42)
+  std::thread t1{&A::f, &a, 42};  // 호출 a->f(42)
+  std::thread t2{&A::f, a, 42};   // 복사 구조체 tmp_a 를 만든 다음 tmp_a.f(42) 를 호출한다
   t1.join();
   t2.join();
 }
 ```
-
-* 如果要为参数是 move-only 类型的函数创建线程，则需要使用 [std::move](https://en.cppreference.com/w/cpp/utility/move) 传入参数
-
+  
+* 인자 유형이 move-only 인 함수에 대한 스레드를 만들려면 [std::move](https://en.cppreference.com/w/cpp/utility/move )를 사용하여 인자를 전달해야 한다.  
+ 
 ```cpp
 #include <iostream>
 #include <thread>
@@ -205,11 +207,10 @@ int main() {
   t.join();
 }
 ```
-
-## 转移线程所有权
-
-* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 是 move-only 类型，不能拷贝，只能通过移动转移所有权，但不能转移所有权到 joinable 的线程 
-
+  
+## 스레드 소유권 이전
+* [std::thread](https://en.cppreference.com/w/cpp/thread/thread )는 이동 전용 유형으로 복사할 수 없으며, 이동을 통해서만 소유권을 이전할 수 있고 조인 가능한 스레드에는 소유권을 이전할 수 없다.   
+  
 ```cpp
 #include <thread>
 #include <utility>
@@ -225,7 +226,7 @@ int main() {
   a = std::thread{g};
   assert(a.joinable());
   assert(b.joinable());
-  // a = std::move(b);  // 错误，不能转移所有权到 joinable 的线程
+  // a = std::move(b);  // 오류, joinable한 스레드로 소유권을 이전할 수 없다.
   a.join();
   a = std::move(b);
   assert(a.joinable());
@@ -234,8 +235,8 @@ int main() {
 }
 ```
 
-* 移动操作同样适用于支持移动的容器
-
+* 이동을 지원하는 컨테이너에도 이동 작업이 적용된다  
+  
 ```cpp
 #include <algorithm>
 #include <thread>
@@ -250,7 +251,7 @@ int main() {
 }
 ```
 
-* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 可以作为函数返回值
+* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 함수 반환값으로 사용 가능
 
 ```cpp
 #include <thread>
@@ -265,7 +266,7 @@ int main() {
 }
 ```
 
-* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 也可以作为函数参数
+* [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 를 함수 매개변수로 사용할 수도 있다
 
 ```cpp
 #include <thread>
@@ -278,10 +279,10 @@ int main() {
   std::thread t([] {});
   f(std::move(t));
 }
-```
-
-* 实现一个可以直接用 [std::thread](https://en.cppreference.com/w/cpp/thread/thread) 构造的自动清理线程的类
-
+```  
+  
+* [std::thread](https://en.cppreference.com/w/cpp/thread/thread ) 로 직접 생성할 수 있는 스레드를 자동으로 정리하는 클래스를 구현한다  
+  
 ```cpp
 #include <stdexcept>
 #include <thread>
@@ -307,7 +308,7 @@ int main() {
 }
 ```
 
-* 类似 [std::jthread](https://en.cppreference.com/w/cpp/thread/jthread) 的类
+* [std::jthread](https://en.cppreference.com/w/cpp/thread/jthread) 와 비슷한 클래스  
 
 ```cpp
 #include <thread>
@@ -362,9 +363,9 @@ int main() {
 }
 ```
 
-## 查看硬件支持的线程数量
+## 하드웨어에서 지원하는 스레드 수 보기
 
-* [hardware_concurrency](https://en.cppreference.com/w/cpp/thread/thread/hardware_concurrency) 会返回硬件支持的并发线程数
+* [hardware_concurrency](https://en.cppreference.com/w/cpp/thread/thread/hardware_concurrency) 하드웨어가 지원하는 동시 스레드 수를 반환한다  
 
 ```cpp
 #include <iostream>
@@ -376,7 +377,7 @@ int main() {
 }
 ```
 
-* 并行版本的 [std::accumulate](https://en.cppreference.com/w/cpp/algorithm/accumulate)
+* 병렬 버전 [std::accumulate](https://en.cppreference.com/w/cpp/algorithm/accumulate)
 
 ```cpp
 #include <algorithm>
@@ -403,15 +404,15 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
   long min_per_thread = 25;
   long max_threads = (len + min_per_thread - 1) / min_per_thread;
   long hardware_threads = std::thread::hardware_concurrency();
-  long num_threads =  // 线程数量
+  long num_threads =  // 스레드 수
       std::min(hardware_threads == 0 ? 2 : hardware_threads, max_threads);
-  long block_size = len / num_threads;  // 每个线程中的数据量
+  long block_size = len / num_threads;  // 각 스레드의 데이터 양
   std::vector<T> res(num_threads);
-  std::vector<std::thread> threads(num_threads - 1);  // 已有主线程故少一个线程
+  std::vector<std::thread> threads(num_threads - 1);  // 이미 메인 스레드가 있으므로 
   Iterator block_start = first;
   for (long i = 0; i < num_threads - 1; ++i) {
     Iterator block_end = block_start;
-    std::advance(block_end, block_size);  // block_end 指向当前块尾部
+    std::advance(block_end, block_size);  // block_end 현재 블록의 끝을 가리킨다
     threads[i] = std::thread{accumulate_block<Iterator, T>{}, block_start,
                              block_end, std::ref(res[i])};
     block_start = block_end;
@@ -429,11 +430,10 @@ int main() {
   assert(parallel_accumulate(std::begin(v), std::end(v), 0) == res);
 }
 ```
-
-## 线程号
-
-* 可以通过对线程实例调用成员函数 [get_id](https://en.cppreference.com/w/cpp/thread/thread/get_id) 或在当前线程中调用 [std::this_thread::get_id](https://en.cppreference.com/w/cpp/thread/get_id) 获取 [线程号](https://en.cppreference.com/w/cpp/thread/thread/id)，其本质是一个无符号整型的封装，允许拷贝和比较，因此可以将其作为容器的键值，如果两个线程的线程号相等，则两者是同一线程或都是空线程（一般空线程的线程号为 0）
-
+  
+## 스레드 번호
+* 스레드 인스턴스에서 멤버 함수 [get_id](https://en.cppreference.com/w/cpp/thread/thread/get_id ) 또는 현재 스레드에서 [std::this_thread::get_id](https://en.cppreference.com/w/cpp/thread/get_id )를 호출하여 얻을 수 있다. [thread_number](https://en.cppreference.com/w/cpp/thread/thread/id )를 얻을 수 있으며, 이는 본질적으로 복사 및 비교를 허용하는 부호 없는 정수를 감싸는 래퍼이므로 컨테이너로 사용할 수 있다. 두 스레드의 스레드 번호가 같으면 동일한 스레드이거나 둘 다 빈 스레드이다(일반적으로 빈 스레드의 스레드 번호는 0 이다).  
+  
 ```cpp
 #include <iostream>
 #include <thread>
@@ -454,7 +454,7 @@ void print_current_thread_id() {
 #elif defined __GNUC__
   std::cout << std::this_thread::get_id() << std::endl;  // 1
   std::cout << pthread_self() << std::endl;              // 140250646003520
-  std::cout << getpid() << std::endl;  // 1502109，ps aux 显示此 pid
+  std::cout << getpid() << std::endl;  // 1502109，ps aux 이 표시 pid
   std::cout << syscall(SYS_gettid) << std::endl;  // 1502109
 #endif
 }
@@ -476,10 +476,10 @@ int main() {
 }
 ```
 
-## CPU 亲和性（affinity）
+## CPU 친화성（affinity）
 
-* 将线程绑定到一个指定的 CPU core 上运行，避免多核 CPU 上下文切换和 cache miss 的开销
-
+* 스레드를 특정 CPU 코어에 바인딩하여 멀티코어 CPU 컨텍스트 스위치 및 캐시 누락으로 인한 오버헤드를 방지한다  
+  
 ```cpp
 #ifdef _WIN32
 #include <Windows.h>
