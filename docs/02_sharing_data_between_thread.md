@@ -1,16 +1,17 @@
-## 线程间共享数据存在的问题
-
-* 不变量（invariant）：关于一个特定数据结构总为 true 的语句，比如 `双向链表的两个相邻节点 A 和 B，A 的后指针一定指向 B，B 的前指针一定指向 A`。有时程序为了方便会暂时破坏不变量，这通常发生于更新复杂数据结构的过程中，比如删除双向链表中的一个节点 N，要先让 N 的前一个节点指向 N 的后一个节点（不变量被破坏），再让 N 的后节点指向前节点，最后删除 N（此时不变量重新恢复）
-* 线程修改共享数据时，就会发生破坏不变量的情况，此时如果有其他线程访问，就可能导致不变量被永久性破坏，这就是 race condition
-* 如果线程执行顺序的先后对结果无影响，则为不需要关心的良性竞争。需要关心的是不变量被破坏时产生的 race condition
-* C++ 标准中定义了 data race 的概念，指代一种特定的 race condition，即并发修改单个对象。data race 会造成未定义行为
-* race condition 要求一个线程进行时，另一线程访问同一数据块，出现问题时很难复现，因此编程时需要使用大量复杂操作来避免 race condition
-
-## 互斥锁（mutex）
-
-* 使用 mutex 在访问共享数据前加锁，访问结束后解锁。一个线程用特定的 mutex 锁定后，其他线程必须等待该线程的 mutex 解锁才能访问共享数据
-* C++11 提供了 [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex) 来创建一个 mutex，可通过 [lock](https://en.cppreference.com/w/cpp/thread/mutex/lock) 加锁，通过 [unlock](https://en.cppreference.com/w/cpp/thread/mutex/unlock) 解锁。一般不手动使用这两个成员函数，而是使用 [std::lock_guard](https://en.cppreference.com/w/cpp/thread/lock_guard) 来自动处理加锁与解锁，它在构造时接受一个 mutex，并会调用 mutex.lock()，析构时会调用 mutex.unlock()
-
+## 스레드 간 데이터 공유 관련 문제
+  
+* 불변성: 특정 데이터 구조에 대해 항상 참인 문장으로, `양방향 체인 테이블에서 인접한 두 노드 A와 B는 A의 뒤쪽 포인터는 B를 가리키고 B의 앞쪽 포인터는 A를 가리켜야 한다` 와 같이 특정 데이터 구조에 대해 항상 참인 문장을 말한다. 프로그램이 편의상 불변성을 일시적으로 파괴하는 경우가 있는데, 이는 복잡한 데이터 구조를 업데이트할 때 주로 발생하며, 예를 들어 양방향 체인 테이블에서 노드 N을 삭제할 때 먼저 N의 이전 노드가 N의 다음 노드를 가리키게 한 다음(불변성이 파괴됨), N의 다음 노드가 이전 노드를 가리키고 마지막으로 N을 삭제하는 방식으로(이 시점에서 불변성이 다시 복원됨) 이루어진다.
+* 불변성의 파괴는 한 스레드가 공유 데이터를 수정할 때 발생하며, 이때 다른 스레드가 액세스하면 불변성이 영구적으로 파괴될 수 있으며 이것이 바로 race condition 이다.
+* 스레드가 실행되는 순서가 결과에 영향을 미치지 않는다면 이는 신경 쓸 필요가 없는 선의의 경쟁이다. 우려되는 것은 불변성이 파괴될 때 발생하는 race condition 이다.
+* C++ 표준은 단일 객체가 동시에 수정되는 특정 종류의 경쟁 조건을 지칭하는 데이터 경쟁 개념을 정의한다. data race는 정의되지 않은 동작을 유발할 수 있다.
+* race condition은 다른 스레드가 동일한 데이터 블록에 액세스하는 동안 한 스레드가 계속 진행해야 하므로 문제가 발생하면 재현하기 어렵고, 프로그래밍은 race condition을 피하기 위해 복잡한 연산을 많이 사용해야 한다.
+  
+  
+  
+## mutex
+* 뮤텍스를 사용하여 공유 데이터에 액세스하기 전에 잠그고 액세스가 완료되면 잠금을 해제한다. 특정 뮤텍스로 스레드를 잠그면 다른 스레드는 해당 스레드의 뮤텍스가 잠금 해제될 때까지 기다려야 공유 데이터에 액세스할 수 있다.  
+* C++11은 뮤텍스를 생성하기 위해 [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex )를 제공하며, [lock](https://en.cppreference.com/w/cpp/thread/mutex/lock)로 잠그고 [unlock](https://en.cppreference.com/w/cpp/thread/mutex/unlock )으로 잠금을 해제할 수 있다. 이 두 멤버 함수를 수동으로 사용하는 대신 [std::lock_guard](https://en.cppreference.com/w/cpp/thread/lock_guard )를 사용하여 잠금 및 잠금 해제를 자동으로 처리할 수 있는데, 이 함수는 생성 시 mutex를 수락하고 생성 시 mutex.lock()를 호출하고, 파괴 시에는 mutex.unlock()을 호출한다.  
+  
 ```cpp
 #include <iostream>
 #include <mutex>
@@ -28,9 +29,10 @@ int main() {
   }                           // unlock
 }
 ```
-
-* C++17 提供了的 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock)，它可以接受任意数量的 mutex，并将这些 mutex 传给 [std::lock](https://en.cppreference.com/w/cpp/thread/lock) 来同时上锁，它会对其中一个 mutex 调用 lock()，对其他调用 try_lock()，若 try_lock() 返回 false 则对已经上锁的 mutex 调用 unlock()，然后重新进行下一轮上锁，标准未规定下一轮的上锁顺序，可能不一致，重复此过程直到所有 mutex 上锁，从而达到同时上锁的效果。C++17 支持类模板实参推断，可以省略模板参数
-
+  
+* C++17 提供了的 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock)，它可以接受任意数量的 mutex，并将这些 mutex 传给 [std::lock](https://en.cppreference.com/w/cpp/thread/lock) 来同时上锁，它会对其中一个 mutex 调用 lock()，对其他调用 try_lock()，若 try_lock() 返回 false 则对已经上锁的 mutex 调用 unlock()，然后重新进行下一轮上锁，标准未规定下一轮的上锁顺序，可能不一致，重复此过程直到所有 mutex 上锁，从而达到同时上锁的效果。C++17 支持类模板实参推断，可以省略模板参数  
+* C++17은 뮤텍스를 원하는 수만큼 받아서 [std::lock](https://en.cppreference.com/w/cpp/thread/lock )에 전달하여 동시에 잠그는 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock ) 함수를 제공한다. 뮤텍스 중 하나에서는 lock(), 다른 뮤텍스에서는 try_lock(), try_lock()이 false를 반환하면 이미 잠긴 뮤텍스에서 unlock()을 호출하고 다음 단계의 잠금을 수행한다. try_lock()이 false를 반환하면 잠긴 뮤텍스에서 unlock()을 호출한 다음 다음 잠금 라운드로 진행하는데, 표준에서는 다음 라운드의 잠금 순서를 지정하지 않아 일관성이 없을 수 있으며 모든 뮤텍스가 잠길 때까지 이 과정을 반복하여 동시에 잠금 효과를 얻을 수 있다.  
+  
 ```cpp
 #include <iostream>
 #include <mutex>
@@ -64,8 +66,8 @@ int main() {
   }  // 25
 }
 ```
-
-* 一般 mutex 和要保护的数据一起放在类中，定义为 private 数据成员，而非全局变量，这样能让代码更清晰。但如果某个成员函数返回指向数据成员的指针或引用，则通过这个指针的访问行为不会被 mutex 限制，因此需要谨慎设置接口，确保 mutex 能锁住数据
+  
+* 일반적으로 뮤텍스는 보호할 데이터가 있는 클래스에 배치되며, 전역 변수가 아닌 비공개 데이터 멤버로 정의되므로 코드가 더 명확해진다. 그러나 멤버 함수가 데이터 멤버에 대한 포인터나 참조를 반환하는 경우 해당 포인터를 통한 액세스는 뮤텍스에 의해 제한되지 않으므로 뮤텍스가 데이터를 잠그도록 인터페이스 설정 방법에 주의를 기울여야 한다.  
 
 ```cpp
 #include <mutex>
@@ -90,33 +92,33 @@ class B {
 int main() {
   B b;
   A* p = b.get_data();
-  p->f();  // 未锁定 mutex 的情况下访问数据
+  p->f();  // mutex 잠금 없이 데이터 엑세스
 }
 ```
-
-* 即便在很简单的接口中，也可能遇到 race condition
-
+  
+* 매우 간단한 인터페이스에서도 race condition이 발생할 수 있다.  
+  
 ```cpp
 std::stack<int> s；
 if (!s.empty()) {
-  int n = s.top();  // 此时其他线程 pop 就会获取错误的 top
+  int n = s.top();  // 다른 스레드에서 pop 하면 잘못된 top이 반환된다  
   s.pop();
 }
-```
-
-* 上述代码先检查非空再获取栈顶元素，在单线程中是安全的，但在多线程中，检查非空之后，如果其他线程先 pop，就会导致当前线程 top 出错。另一个潜在的竞争是，如果两个线程都未 pop，而是分别获取了 top，虽然不会产生未定义行为，但这种对同一值处理了两次的行为更为严重，因为看起来没有任何错误，很难定位 bug
-* 既然如此，为什么不直接让 pop 返回栈顶元素？原因在于，构造返回值的过程可能抛异常，弹出后未返回会导致数据丢失。比如有一个元素为 vector 的 stack，拷贝 vector 需要在堆上分配内存，如果系统负载严重或资源有限（比如 vector 有大量元素），vector 的拷贝构造函数就会抛出 [std::bad_alloc](https://en.cppreference.com/w/cpp/memory/new/bad_alloc) 异常。如果 pop 可以返回栈顶元素值，返回一定是最后执行的语句，stack 在返回前已经弹出了元素，但如果拷贝返回值时抛出异常，就会导致弹出的数据丢失（从栈上移除但拷贝失败）。因此 [std::stack](https://en.cppreference.com/w/cpp/container/stack) 的设计者将这个操作分解为 top 和 pop 两部分
-* 下面思考几种把 top 和 pop 合为一步的方法。第一种容易想到的方法是传入一个引用来获取结果值，这种方式的明显缺点是，需要构造一个栈元素类型的实例，这是不现实的，为了获取结果而临时构造一个对象并不划算，元素类型可能不支持赋值（比如用户自定义某个类型），构造函数可能还需要一些参数
-
+```  
+    
+* 스택의 맨 위를 가져오기 전에 null이 아닌지 확인하는 위의 코드는 단일 스레드에서는 안전하지만, 멀티 스레드에서는 다른 스레드가 먼저 pop될 경우 현재 스레드의 맨 위가 잘못될 수 있다. 또 다른 잠재적 논쟁은 두 스레드 모두 pop 되지 않고 개별적으로 맨 위를 가져오는 경우 정의되지 않은 동작이 발생하지는 않지만 동일한 값이 두 번 처리되는 경우 오류가 없는 것처럼 보이고 버그를 찾기가 어렵기 때문에 더 나빠질 수 있다는 것이다.  
+* 그렇다면 그냥 스택의 맨 위를 반환하도록 하면 어떨까? 그 이유는 반환값을 구성하는 과정에서 예외가 발생할 수 있고, 반환하지 않고 pop 하면 데이터가 손실될 수 있기 때문이다. 예를 들어, 벡터를 요소로 하는 스택이 있고 벡터를 복사하기 위해 힙에 메모리를 할당해야 하는데 시스템에 부하가 많거나 리소스가 제한되어 있는 경우(예: 벡터에 많은 수의 요소가 있는 경우) 벡터의 복사 생성자는 [std::bad_alloc](https://en.cppreference.com/w/cpp/memory/new/bad_alloc ) 예외를 발생시킨다. pop이 스택 최상위 요소의 값을 반환할 수 있다면, 반환은 실행된 마지막 문이어야 하고 스택은 반환하기 전에 이미 요소를 pop 했지만, 반환 값을 복사할 때 예외가 발생하면 pop 된 데이터가 손실된다(스택에서 제거되지만 복사는 실패한다). 그래서 [std::stack](https://en.cppreference.com/w/cpp/container/stack )의 디자이너는 이 연산을 top과 pop의 두 부분으로 나눈다.  
+* top과 pop을 한 단계로 결합하는 몇 가지 방법을 생각해 보자. 가장 먼저 생각하기 쉬운 방법은 결과 값을 얻기 위해 참조를 전달하는 것이다. 이 접근법의 명백한 단점은 스택의 엘리먼트 타입 인스턴스를 구성해야 하는데, 이는 비실용적이며 결과를 얻기 위해 임시 객체를 구성하는 것은 비용 효율적이지 않으며 엘리먼트 타입이 (예를 들어 사용자 정의 타입의) 할당을 지원하지 않을 수 있고 생성자에 일부 인자가 필요할 수 있다는 점이다.  
+  
 ```cpp
 std::vector<int> res;
 s.pop(res);
 ```
-
-* 因为 pop 返回值时只担心该过程抛异常，第二种方案是为元素类型设置不抛异常的拷贝或移动构造函数，使用 [std::is_nothrow_copy_constructible](https://en.cppreference.com/w/cpp/types/is_copy_constructible) 和 [std::is_nothrow_move_constructible](https://en.cppreference.com/w/cpp/types/is_move_constructible)。但这种方式过于局限，只支持拷贝或移动不抛异常的类型
-* 第三种方案是返回指向弹出元素的指针，指针可以自由拷贝且不会抛异常，[std::shared_ptr](https://en.cppreference.com/w/cpp/memory/shared_ptr) 是个不错的选择，但这个方案的开销太大，尤其是对于内置类型来说，比如 int 为 4 字节， `shared_ptr<int>` 为 16 字节，开销是原来的 4 倍
-* 第四种方案是结合方案一二或者一三，比如结合方案一三实现一个线程安全的 stack
-
+  
+* pop은 프로시저가 예외를 던진다는 우려만 있는 값을 반환하므로, 두 번째 옵션은 예외를 던지지 않는 엘리먼트 타입에 대한 복사 또는 이동 생성자를 설정하는 것으로 [std::is_nothrow_copy_constructable](https://en.cppreference.com/w/cpp/types/is_copy_constructible ) 및 [std::is_nothrow_move_constructible](https://en.cppreference.com/w/cpp/types/is_move_constructible )을 사용할 수 있다. 그러나 이 방법은 너무 제한적이며 복사나 이동이 예외를 던지지 않는 타입만 지원한다.  
+* 세 번째 옵션은 예외를 던지지 않고 자유롭게 복사할 수 있는 pop된 엘리먼트에 대한 포인터를 반환하는 것으로 [std::shared_ptr](https://en.cppreference.com/w/cpp/memory/shared_ptr )이 좋은 선택이지만, 이 옵션의 오버헤드가 너무 높다. 타입의 경우 예를 들어 int는 4바이트이고 `shared_ptr<int>`는 16바이트로 4배나 많다.  
+* 네 번째 옵션은 옵션 1, 2 또는 3을 결합하는 것이다(예: 옵션 1 또는 3과 함께 스레드 안전 스택을 구현하는 경우).    
+  
 ```cpp
 #include <exception>
 #include <memory>
@@ -174,15 +176,15 @@ class ConcurrentStack {
   std::stack<T> s_;
 };
 ```
-
-* 之前锁的粒度（锁保护的数据量大小）太小，保护操作覆盖不周全，这里的粒度就较大，覆盖了大量操作。但并非粒度越大越好，如果锁粒度太大，过多线程请求竞争占用资源时，并发的性能就会较差
-* 如果给定操作需要对多个 mutex 上锁时，就会引入一个新的潜在问题，即死锁
-
-## 死锁
-
-* 死锁的四个必要条件：互斥、占有且等待、不可抢占、循环等待
-* 避免死锁通常建议让两个 mutex 以相同顺序上锁，总是先锁 A 再锁 B，但这并不适用所有情况。[std::lock](https://en.cppreference.com/w/cpp/thread/lock) 可以同时对多个 mutex 上锁，并且没有死锁风险，它可能抛异常，此时就不会上锁，因此要么都锁住，要么都不锁
-
+  
+* 잠금 세분성(잠금으로 보호되는 데이터의 크기)이 너무 작으면 보호 작업이 완전히 커버되지 않으며, 여기서는 세분성이 더 커서 많은 수의 작업을 커버한다.   그러나 세분성이 클수록 좋지만 잠금 세분성이 너무 커서 리소스를 놓고 경쟁을 요청하는 스레드가 너무 많으면 동시성 성능이 저하한다.  
+* 주어진 연산에 여러 뮤텍스에 대한 잠금이 필요한 경우, 교착 상태라는 새로운 잠재적 문제가 발생한다.  
+  
+## 교착 상태
+  
+* 교착 상태에 필요한 네 가지 조건은 상호 배제, 소유 및 대기, 사용할 수 없음, 주기적 대기이다.
+* 교착 상태를 피하려면 일반적으로 두 뮤텍스를 같은 순서로 잠그는 것이 좋지만, 항상 A를 B보다 먼저 잠그는 것이 좋지만 모든 경우에 적용되는 것은 아니다. [std::lock](https://en.cppreference.com/w/cpp/thread/lock )은 교착 상태의 위험 없이 동시에 여러 뮤텍스를 잠글 수 있으며, 예외를 던진 다음 잠그지 않을 수 있으므로 둘 다 또는 어느 쪽도 아니다!  
+    
 ```cpp
 #include <mutex>
 #include <thread>
@@ -195,16 +197,16 @@ struct A {
 
 void f(A &a, A &b, int n) {
   if (&a == &b) {
-    return;  // 防止对同一对象重复加锁
+    return;  // 동일한 개체의 반복적인 잠금 방지
   }
-  std::lock(a.m_, b.m_);  // 同时上锁防止死锁
-  // 下面按固定顺序加锁，看似不会有死锁的问题
-  // 但如果没有 std::lock 同时上锁，另一线程中执行 f(b, a, n)
-  // 两个锁的顺序就反了过来，从而可能导致死锁
+  std::lock(a.m_, b.m_);  // 동시 잠금으로 교착 상태 방지
+  // 다음 잠금은 고정된 순서로 추가되므로 교착 상태 문제는 없는 것처럼 보인다.
+  // 하지만 std::lock이 동시에 잠기지 않은 상태에서 다른 스레드에서 f(b, a, n)이 실행되면 
+  // 두 잠금의 순서가 뒤바뀌어서 교착 상태가 발생할 수 있다.
   std::lock_guard<std::mutex> lock1(a.m_, std::adopt_lock);
   std::lock_guard<std::mutex> lock2(b.m_, std::adopt_lock);
 
-  // 等价实现，先不上锁，后同时上锁
+  // 동등한 구현, 처음에는 잠금 없이, 그다음에는 잠금과 동시에 구현하기
   //   std::unique_lock<std::mutex> lock1(a.m_, std::defer_lock);
   //   std::unique_lock<std::mutex> lock2(b.m_, std::defer_lock);
   //   std::lock(lock1, lock2);
@@ -224,9 +226,9 @@ int main() {
   t2.join();
 }
 ```
-
-* [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 在构造时接受一个 mutex，并会调用 mutex.lock()，析构时会调用 mutex.unlock()
-
+  
+* [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) mutex를 수락하고 생성 시 mutex.lock()，소멸 시에는 mutex.unlock()을 호출한다.  
+  
 ```cpp
 #include <iostream>
 #include <mutex>
