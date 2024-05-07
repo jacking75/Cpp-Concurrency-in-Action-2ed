@@ -29,8 +29,7 @@ int main() {
   }                           // unlock
 }
 ```
-  
-* C++17 提供了的 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock)，它可以接受任意数量的 mutex，并将这些 mutex 传给 [std::lock](https://en.cppreference.com/w/cpp/thread/lock) 来同时上锁，它会对其中一个 mutex 调用 lock()，对其他调用 try_lock()，若 try_lock() 返回 false 则对已经上锁的 mutex 调用 unlock()，然后重新进行下一轮上锁，标准未规定下一轮的上锁顺序，可能不一致，重复此过程直到所有 mutex 上锁，从而达到同时上锁的效果。C++17 支持类模板实参推断，可以省略模板参数  
+    
 * C++17은 뮤텍스를 원하는 수만큼 받아서 [std::lock](https://en.cppreference.com/w/cpp/thread/lock )에 전달하여 동시에 잠그는 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock ) 함수를 제공한다. 뮤텍스 중 하나에서는 lock(), 다른 뮤텍스에서는 try_lock(), try_lock()이 false를 반환하면 이미 잠긴 뮤텍스에서 unlock()을 호출하고 다음 단계의 잠금을 수행한다. try_lock()이 false를 반환하면 잠긴 뮤텍스에서 unlock()을 호출한 다음 다음 잠금 라운드로 진행하는데, 표준에서는 다음 라운드의 잠금 순서를 지정하지 않아 일관성이 없을 수 있으며 모든 뮤텍스가 잠길 때까지 이 과정을 반복하여 동시에 잠금 효과를 얻을 수 있다.  
   
 ```cpp
@@ -248,13 +247,14 @@ int main() {
 ```
 
 * [std::lock_guard](https://en.cppreference.com/w/cpp/thread/lock_guard) 未提供任何接口且不支持拷贝和移动，而 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 多提供了一些接口，使用更灵活，占用的空间也多一点。一种要求灵活性的情况是转移锁的所有权到另一个作用域
-
+* std::lock_guard](https://en.cppreference.com/w/cpp/thread/lock_guard )는 인터페이스를 제공하지 않고 복사 및 이동을 지원하지 않는 반면, [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock )는 몇 가지 인터페이스를 더 제공하고 더 유연하며 공간을 조금 더 차지한다. 유연성이 필요한 한 가지 경우는 잠금의 소유권을 다른 범위로 이전하는 것이다.  
+  
 ```cpp
 std::unique_lock<std::mutex> get_lock() {
   extern std::mutex m;
   std::unique_lock<std::mutex> l(m);
   prepare_data();
-  return l;  // 不需要 std::move，编译器负责调用移动构造函数
+  return l;  // 컴파일러가 이동 생성자 호출을 처리하므로 std::move가 필요하지 않다
 }
 
 void f() {
@@ -262,28 +262,28 @@ void f() {
   do_something();
 }
 ```
-
-* 对一些费时的操作上锁可能造成很多操作被阻塞，可以在面对这些操作时先解锁
-
+  
+* 시간이 많이 걸리는 일부 작업을 잠그면 많은 작업이 차단될 수 있으며, 이러한 작업을 먼저 수행한 후 잠금을 해제할 수 있다  
+  
 ```cpp
 void process_file_data() {
   std::unique_lock<std::mutex> l(m);
   auto data = get_data();
-  l.unlock();  // 费时操作没有必要持有锁，先解锁
+  l.unlock();  // 시간이 오래 걸리는 작업 때문에 잠금을 기다릴 필요 없이 먼저 잠금을 해제한다
   auto res = process(data);
-  l.lock();  // 写入数据前上锁
+  l.lock();  // 데이터를 쓰기 전에 잠금한다
   write_result(data, res);
 }
-```
-
-* C++17 最优的同时上锁方法是使用 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock)
-* 解决死锁并不简单，[std::lock](https://en.cppreference.com/w/cpp/thread/lock) 和 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock) 无法获取其中的锁，此时解决死锁更依赖于开发者的能力。避免死锁有四个建议
-  * 第一个避免死锁的建议是，一个线程已经获取一个锁时就不要获取第二个。如果每个线程只有一个锁，锁上就不会产生死锁（但除了互斥锁，其他方面也可能造成死锁，比如即使无锁，线程间相互等待也可能造成死锁）
-  * 第二个建议是，持有锁时避免调用用户提供的代码。用户提供的代码可能做任何时，包括获取锁，如果持有锁时调用用户代码获取锁，就会违反第一个建议，并造成死锁。但有时调用用户代码是无法避免的
-  * 第三个建议是，按固定顺序获取锁。如果必须获取多个锁且不能用 [std::lock](https://en.cppreference.com/w/cpp/thread/lock) 同时获取，最好在每个线程上用固定顺序获取。上面的例子虽然是按固定顺序获取锁，但如果不同时加锁就会出现死锁，对于这种情况的建议是规定固定的调用顺序
-  * 第四个建议是使用层级锁，如果一个锁被低层持有，就不允许在高层再上锁
-* 层级锁实现如下
-
+```  
+  
+* C++17에서 최적의 동시 잠금 방법은 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock)을 사용하는 것이다.  
+* 데드락을 해결하는 것은 간단하지 않다. [std::lock](https://en.cppreference.com/w/cpp/thread/lock) 및 [std::scoped_lock](https://en.cppreference.com/w/cpp/thread/scoped_lock )은 잠금을 획득할 수 없으며, 교착 상태 해결은 개발자의 능력에 따라 달라진다. 교착 상태를 피하기 위한 네 가지 권장 사항이 있다.  
+    * 교착 상태를 피하기 위한 첫 번째 권장 사항은 한 스레드가 이미 잠금을 획득한 경우 두 번째 잠금을 획득하지 않는 것이다. 스레드당 하나의 잠금만 있으면 잠금에서 교착 상태가 발생하지 않는다(하지만 잠금 없이도 스레드가 서로를 기다리는 등 상호 배타적인 잠금 이외의 다른 요인으로 인해 교착 상태가 발생할 수 있다).  
+    * 두 번째 제안은 잠금을 유지할 때 사용자가 제공한 코드를 호출하지 않는 것이다. 사용자 제공 코드는 잠금 획득을 포함한 모든 작업을 수행할 수 있으며, 잠금 상태에서 사용자 코드를 호출하여 잠금을 획득하는 것은 첫 번째 권장 사항을 위반하여 교착 상태를 유발할 수 있다. 하지만 사용자 코드를 호출하는 것이 불가피한 경우도 있다.
+    * 세 번째 권장 사항은 고정된 순서로 잠금을 획득하는 것이다. 여러 개의 잠금을 획득해야 하는데 [std::lock](https://en.cppreference.com/w/cpp/thread/lock )으로 동시에 획득할 수 없는 경우 각 스레드에서 고정된 순서로 잠금을 획득하는 것이 좋다. 위의 예제는 고정된 순서로 잠금을 획득하지만 잠금을 동시에 획득하지 않으면 교착 상태가 발생하므로 이 경우 고정된 호출 순서를 지정하는 것이 좋다.  
+    * 네 번째 권장 사항은 계단식 잠금을 사용하는 것이다. 하위 수준에서 잠금이 유지되면 상위 수준에서 다시 잠그는 것이 허용되지 않는다.  
+* 계층적 잠금은 다음과 같이 구현된다.
+  
 ```cpp
 #include <iostream>
 #include <mutex>
@@ -295,7 +295,7 @@ class HierarchicalMutex {
       : cur_hierarchy_(hierarchy_value), prev_hierarchy_(0) {}
 
   void lock() {
-    validate_hierarchy();  // 层级错误则抛异常
+    validate_hierarchy();  // 계단식 오류가 있는 경우 예외를 던진다
     m_.lock();
     update_hierarchy();
   }
@@ -313,7 +313,7 @@ class HierarchicalMutex {
     if (thread_hierarchy_ != cur_hierarchy_) {
       throw std::logic_error("mutex hierarchy violated");
     }
-    thread_hierarchy_ = prev_hierarchy_;  // 恢复前一线程的层级值
+    thread_hierarchy_ = prev_hierarchy_;  // 이전 스레드의 계층적 값을 복원한다
     m_.unlock();
   }
 
@@ -325,9 +325,9 @@ class HierarchicalMutex {
   }
 
   void update_hierarchy() {
-    // 先存储当前线程的层级值（用于解锁时恢复）
+    // 현재 스레드의 계층 구조 값을 먼저 저장한다(잠금 해제 시 복구를 위해)
     prev_hierarchy_ = thread_hierarchy_;
-    // 再把其设为锁的层级值
+    // 그런 다음 잠금의 계층 구조 값으로 설정한다
     thread_hierarchy_ = cur_hierarchy_;
   }
 
@@ -335,35 +335,35 @@ class HierarchicalMutex {
   std::mutex m_;
   const int cur_hierarchy_;
   int prev_hierarchy_;
-  static thread_local int thread_hierarchy_;  // 所在线程的层级值
+  static thread_local int thread_hierarchy_;  // 호스트 스레드의 계층적 값
 };
 
-// static thread_local 表示存活于一个线程周期
+// static thread_local 한 스레드 주기 동안 지속됨을 나타낸다
 thread_local int HierarchicalMutex::thread_hierarchy_(INT_MAX);
 
 HierarchicalMutex high(10000);
 HierarchicalMutex mid(6000);
 HierarchicalMutex low(5000);
 
-void lf() {  // 最低层函数
+void lf() {  // 최하위 함수
   std::lock_guard<HierarchicalMutex> l(low);
-  // 调用 low.lock()，thread_hierarchy_ 为 INT_MAX，
-  // cur_hierarchy_ 为 5000，thread_hierarchy_ > cur_hierarchy_，
-  // 通过检查，上锁，prev_hierarchy_ 更新为 INT_MAX，
-  // thread_hierarchy_ 更新为 5000
-}  // 调用 low.unlock()，thread_hierarchy_ == cur_hierarchy_，
-// 通过检查，thread_hierarchy_ 恢复为 prev_hierarchy_ 保存的 INT_MAX，解锁
+  // thread_hierarchy_를 INT_MAX로 low.lock()을 호출한다.
+  // cur_hierarchy_는 5000, thread_hierarchy_ > cur_hierarchy_
+  // 통과 검사, 잠금, prev_hierarchy_가 INT_MAX로 업데이트
+  // thread_hierarchy_가 5000으로 업데이트된다.
+}  // 호출 low.unlock()，thread_hierarchy_ == cur_hierarchy_，
+// prev_hierarchy_가 저장한 INT_MAX로 복원된 것을 확인하여 잠금을 해제한다
 
 void hf() {
-  std::lock_guard<HierarchicalMutex> l(high);  // high.cur_hierarchy_ 为 10000
-  // thread_hierarchy_ 为 10000，可以调用低层函数
-  lf();  // thread_hierarchy_ 从 10000 更新为 5000
-  //  thread_hierarchy_ 恢复为 10000
-}  //  thread_hierarchy_ 恢复为 INT_MAX
+  std::lock_guard<HierarchicalMutex> l(high);  // high.cur_hierarchy_ 는 10000
+  // 저수준 함수를 호출하기 위해 thread_hierarchy_ 는 10000 이다
+  lf();  // thread_hierarchy_ 가 10000 에서 5000 욿 업데이트 된다
+  //  thread_hierarchy_ 가 10000 으로 복원된다
+}  //  thread_hierarchy_ 가 INT_MAX 로 복원된다
 
 void mf() {
-  std::lock_guard<HierarchicalMutex> l(mid);  // thread_hierarchy_ 为 6000
-  hf();  // thread_hierarchy_ < high.cur_hierarchy_，违反了层级结构，抛异常
+  std::lock_guard<HierarchicalMutex> l(mid);  // thread_hierarchy_ 는 6000
+  hf();  // thread_hierarchy_ < high.cur_hierarchy_ 계층 위반 예외를 던진다
 }
 
 int main() {
@@ -376,13 +376,17 @@ int main() {
   }
 }
 ```
-
-### 读写锁（reader-writer mutex）
+  
+### 읽기-쓰기 잠금（reader-writer mutex）
 
 * 有时会希望对一个数据上锁时，根据情况，对某些操作相当于不上锁，可以并发访问，对某些操作保持上锁，同时最多只允许一个线程访问。比如对于需要经常访问但很少更新的缓存数据，用 [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex) 加锁会导致同时最多只有一个线程可以读数据，这就需要用上读写锁，读写锁允许多个线程并发读但仅一个线程写
 * C++14 提供了 [std::shared_timed_mutex](https://en.cppreference.com/w/cpp/thread/shared_timed_mutex)，C++17 提供了接口更少性能更高的 [std::shared_mutex](https://en.cppreference.com/w/cpp/thread/shared_mutex)，如果多个线程调用 shared_mutex.lock_shared()，多个线程可以同时读，如果此时有一个写线程调用 shared_mutex.lock()，则读线程均会等待该写线程调用 shared_mutex.unlock()。C++11 没有提供读写锁，可使用 [boost::shared_mutex](https://www.boost.org/doc/libs/1_82_0/doc/html/thread/synchronization.html#thread.synchronization.mutex_types.shared_mutex)
 * C++14 提供了 [std::shared_lock](https://en.cppreference.com/w/cpp/thread/shared_lock)，它在构造时接受一个 mutex，并会调用 mutex.lock_shared()，析构时会调用 mutex.unlock_shared()
 
+* 상황에 따라 특정 연산은 잠그지 않고 동시에 액세스할 수 있고, 특정 연산은 잠긴 상태로 한 번에 최대 하나의 스레드만 액세스할 수 있는 방식으로 데이터를 잠그는 것이 바람직할 때가 있다. 예를 들어, 자주 액세스해야 하지만 거의 업데이트되지 않는 캐시된 데이터의 경우 [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex )로 잠그면 최대 하나의 스레드만 동시에 데이터를 읽을 수 있으므로 읽기/쓰기 잠금이 필요하며, 여러 스레드가 동시에 읽을 수 있지만 쓰기에는 하나의 스레드만 허용된다. 스레드는 읽을 수 있지만 쓸 수 있는 스레드는 하나뿐이다.  
+* C++14는 [std::shared_timed_mutex](https://en.cppreference.com/w/cpp/thread/shared_timed_mutex )를 제공하고, C++17은 인터페이스 수는 적고 성능은 더 높은 [std::shared_mutex](https://en.cppreference.com/w/cpp/thread/shared_mutex )를 제공한다. 여러 스레드가 shared_mutex.lock_shared() 를 호출하면 여러 스레드가 동시에 읽을 수 있고, 쓰기 스레드가 shared_mutex.lock_shared() 를 여러 스레드가 동시에 읽을 수 있는 기능을 제공한다. shared_mutex.lock()을 호출하면 읽기 스레드는 쓰기 스레드가 shared_mutex.unlock()을 호출할 때까지 기다린다. C++11은 읽기/쓰기 잠금을 제공하지 않으므로 [boost::shared_mutex](https://www.boost.org/doc/libs/1_82_0/doc/ html/thread/synchronisation.html#thread.synchronization.mutex_types.shared_mutex)를 사용한다.  
+* C++14는 [std::shared_lock](https://en.cppreference.com/w/cpp/thread/shared_lock)을 제공하며, 뮤텍스를 받아들이고 생성 시 mutex.lock_shared()를 호출하고 소멸 시 mutex.unlock_shared()를 호출한다.   
+  
 ```cpp
 #include <iostream>
 #include <shared_mutex>
@@ -399,9 +403,9 @@ int main() {
     std::shared_lock l(a);  // lock_shared
   }                         // unlock_shared
 }
-```
-
-* 对于 [std::shared_mutex](https://en.cppreference.com/w/cpp/thread/shared_mutex)，通常在读线程中用 [std::shared_lock](https://en.cppreference.com/w/cpp/thread/shared_lock) 管理，在写线程中用 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 管理
+```  
+  
+* [std::shared_mutex](https://en.cppreference.com/w/cpp/thread/shared_mutex )의 경우 일반적으로 읽기 스레드에서는 [std::shared_lock](https://en.cppreference.com/w/cpp/thread/shared_lock)이, 쓰기 스레드에서는 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 이 관리한다.  
 
 ```cpp
 class A {
@@ -421,11 +425,11 @@ class A {
   int n_ = 0;
 };
 ```
+  
+### 재귀 잠금
 
-### 递归锁
-
-* [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex) 是不可重入的，未释放前再次上锁是未定义行为
-
+* [std::mutex](https://en.cppreference.com/w/cpp/thread/mutex) 가 재진입하지 않으며, 해제하기 전에 다시 잠그는 것은 정의되지 않은 동작이다  
+  
 ```cpp
 #include <mutex>
 
@@ -450,9 +454,9 @@ int main() {
   A{}.g();  // Undefined Behavior
 }
 ```
-
-* 为此 C++ 提供了 [std::recursive_mutex](https://en.cppreference.com/w/cpp/thread/recursive_mutex)，它可以在一个线程上多次获取锁，但在其他线程获取锁之前必须释放所有的锁
-
+  
+* 이를 위해 C++는 스레드에서 여러 번 잠금을 획득할 수 있지만 다른 스레드가 잠금을 획득하기 전에 모든 잠금을 해제해야 하는 [std::recursive_mutex](https://en.cppreference.com/w/cpp/thread/recursive_mutex )를 제공한다.
+  
 ```cpp
 #include <mutex>
 
@@ -477,12 +481,12 @@ int main() {
   A{}.g();  // OK
 }
 ```
+  
+* 대부분의 경우 재귀적 잠금이 필요하다는 것은 코드 설계에 문제가 있음을 나타낸다. 예를 들어 클래스의 모든 멤버 함수가 잠겨 있고 한 멤버 함수가 다른 멤버 함수를 호출하는 경우 여러 번 잠길 수 있는데, 이 경우 재귀 잠금을 사용하면 정의되지 않은 동작을 방지할 수 있다. 하지만 이 설계는 본질적으로 문제가 있다. 더 나은 접근 방식은 함수 중 하나를 비공개 멤버로 추출하여 잠금을 해제하고 다른 멤버를 호출하기 전에 잠그는 것이다.  
 
-* 多数情况下，如果需要递归锁，说明代码设计存在问题。比如一个类的每个成员函数都会上锁，一个成员函数调用另一个成员函数，就可能多次上锁，这种情况用递归锁就可以避免产生未定义行为。但显然这个设计本身是有问题的，更好的办法是提取其中一个函数作为 private 成员并且不上锁，其他成员先上锁再调用该函数
-
-## 对并发初始化的保护
-
-* 除了对并发访问共享数据的保护，另一种常见的情况是对并发初始化的保护
+## 동시 초기화에 대한 보호
+  
+* 공유 데이터에 대한 동시 액세스에 대한 보호 외에도 또 다른 일반적인 경우는 동시 초기화에 대한 보호이다  
 
 ```cpp
 #include <memory>
@@ -515,7 +519,7 @@ int main() {
 }
 ```
 
-* 上锁只是为了保护初始化过程，会不必要地影响性能，一种容易想到的优化方式是双重检查锁模式，但这存在潜在的 race condition
+* 초기화 프로세스를 보호하기 위해 잠그는 것은 불필요하게 성능에 영향을 미칠 수 있으며, 쉽게 생각할 수 있는 최적화 방법은 이중 검사 잠금 패턴이지만 이는 잠재적인 race condition을 가지고 있다  
 
 ```cpp
 #include <memory>
@@ -531,15 +535,15 @@ std::shared_ptr<A> p;
 std::mutex m;
 
 void init() {
-  if (!p) {  // 未上锁，其他线程可能在执行 #1，则此时 p 不为空
+  if (!p) {  //  잠금 해제되면 다른 스레드가 #1을 실행 중일 수 있으며, 그러면 p는 null이 아니다
     std::lock_guard<std::mutex> l(m);
     if (!p) {
       p.reset(new A);  // 1
-      // 先分配内存，再在内存上构造 A 的实例并返回内存的指针，最后让 p 指向它
-      // 也可能先让 p 指向它，再在内存上构造 A 的实例
+      // 먼저 메모리를 할당하고, 메모리에 A의 인스턴스를 생성한 다음 이에 대한 포인터를 반환한 다음 p가 이를 가리키도록 한다
+      // p가 먼저 이를 가리키게 한 다음 메모리에 A의 인스턴스를 생성하는 것도 가능하다.
     }
   }
-  p->f();  // p 可能指向一块还未构造实例的内存，从而崩溃
+  p->f();  // p 는 아직 인스턴스가 생성되지 않은 메모리 덩어리를 가리킬 수 있다
 }
 
 int main() {
@@ -551,7 +555,7 @@ int main() {
 }
 ```
 
-* 为此，C++11 提供了 [std::once_flag](https://en.cppreference.com/w/cpp/thread/once_flag) 和 [std::call_once](https://en.cppreference.com/w/cpp/thread/call_once) 来保证对某个操作只执行一次
+* 이를 위해 C++11은 연산이 한 번만 실행되도록 하기 위해 [std::once_flag](https://en.cppreference.com/w/cpp/thread/once_flag )와 [std::call_once](https://en.cppreference.com/w/cpp/thread/call_once )를 제공한다.   
 
 ```cpp
 #include <memory>
@@ -580,8 +584,8 @@ int main() {
 }
 ```
 
-* [std::call_once](https://en.cppreference.com/w/cpp/thread/call_once) 也可以用在类中
-
+* [std::call_once](https://en.cppreference.com/w/cpp/thread/call_once)   
+  
 ```cpp
 #include <iostream>
 #include <mutex>
@@ -610,7 +614,7 @@ int main() {
 }  // 122
 ```
 
-* static 局部变量在声明后就完成了初始化，这存在潜在的 race condition，如果多线程的控制流同时到达 static 局部变量的声明处，即使变量已在一个线程中初始化，其他线程并不知晓，仍会对其尝试初始化。为此，C++11 规定，如果 static 局部变量正在初始化，线程到达此处时，将等待其完成，从而避免了 race condition。只有一个全局实例时，可以直接用 static 而不需要 [std::call_once](https://en.cppreference.com/w/cpp/thread/call_once)
+* 정적 지역 변수는 선언된 후에 초기화되므로 잠재적인 경쟁 조건이 된다. 여러 스레드의 제어 흐름이 동시에 정적 지역 변수 선언에 도착하면 변수가 한 스레드에서 초기화 되었더라도 다른 스레드는 변수가 이미 한 스레드에서 초기화 되었다는 사실을 모르고 초기화를 시도하게 된다. 이러한 이유로 C++11은 정적 지역 변수가 초기화되고 있는 경우 그곳에 도착한 스레드가 완료될 때까지 기다리도록 지정하여 경쟁 조건을 피한다. 전역 인스턴스가 하나만 있는 경우 [std::call_once](https://en.cppreference. com/w/cpp/thread/call_once ) 대신 정적을 직접 사용할 수 있다  
 
 ```cpp
 template <typename T>
