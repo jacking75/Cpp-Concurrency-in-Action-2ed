@@ -1,15 +1,16 @@
-## 内存模型基础
+## 메모리 모델의 기본 사항
 
-* 为了避免 race condition，线程就要规定执行顺序。一种方式是使用 mutex，后一线程必须等待前一线程解锁。第二种方式是使用原子操作来避免竞争访问同一内存位置
-* 原子操作是不可分割的操作，要么做了要么没做，不存在做一半的状态。如果读取对象值的加载操作是原子的，那么对象上的所有修改操作也是原子的，读取的要么是初始值，要么是某个修改完成后的存储值。因此，原子操作不存在修改过程中值被其他线程看到的情况，也就避免了竞争风险
-* 每个对象从初始化开始都有一个修改顺序，这个顺序由来自所有线程对该对象的写操作组成。通常这个顺序在运行时会变动，但在任何给定的程序执行中，系统中所有线程都必须遵循此顺序
-* 如果对象不是原子类型，就要通过同步来保证线程遵循每个变量的修改顺序。如果一个变量对于不同线程表现出不同的值序列，就会导致数据竞争和未定义行为。使用原子操作就可以把同步的责任抛给编译器
+* 경합 조건을 피하려면 스레드가 실행될 순서를 지정해야 한다. 이를 위한 한 가지 방법은 뮤텍스를 사용하는 것인데 여기서 후자의 스레드는 전자의 스레드가 잠금 해제될 때까지 기다려야 한다. 두 번째 방법은 원자 연산을 사용하여 동일한 메모리 위치에 액세스하기 위한 경쟁을 피하는 것이다.
+* 원자 연산은 완료되거나 완료되지 않는 분할 불가능한 연산으로, 반쯤 완료된 상태 같은 것은 존재하지 않는다. 객체의 값을 읽는 로드 연산이 원자 연산이면 객체에 대한 모든 수정 연산도 원자 연산이며, 일부 수정이 완료된 후 초기 값이나 저장된 값을 읽는다. 따라서 원자 연산은 수정 중에 다른 스레드가 값을 볼 수 있는 상황이 발생하지 않으며 경합의 위험을 피할 수 있다.
+* 각 객체는 초기화부터 모든 스레드에서 객체에 대한 쓰기 작업으로 구성된 수정 순서를 갖는다. 일반적으로 이 순서는 런타임에 변경되지만, 특정 프로그램 실행에서 시스템의 모든 스레드는 다음 순서를 따라야 한다.
+* 객체가 원자형이 아닌 경우, 동기화를 사용하여 스레드가 각 변수가 수정되는 순서를 따르도록 한다. 변수가 스레드마다 다른 값 순서를 나타내면 데이터 경합과 정의되지 않은 동작이 발생할 수 있다. 원자 연산을 사용하면 동기화 책임이 컴파일러에 넘어간다.
+  
+  
+## 원자 연산과 원자 타입
 
-## 原子操作和原子类型
+### 표준 원자 타입
 
-### 标准原子类型
-
-* 标准原子类型定义在 [\<atomic\>](https://en.cppreference.com/w/cpp/header/atomic) 中。也可以用 mutex 模拟原子操作，实际上标准原子类型可能就是这样实现的，它们都有一个 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free) 函数，返回 true 说明该原子类型操作是无锁的，用的是原子指令，返回 false 则是用锁
+* 표준 원자형은 [\<atomic\>](https://en.cppreference.com/w/cpp/header/atomic)에 정의되어 있다. 뮤텍스로 원자 연산을 시뮬레이션하는 것도 가능하며, 실제로 표준 원자 형은 그렇게 구현될 수 있다. 둘 다 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free) 함수를 가지고 있는데, 이 함수는 참을 반환하여 모두 [is_lock_free]() 함수가 있는데, 이 함수는 원자 연산이 락이 없고 원자 명령어를 사용함을 나타내는 참을 반환하고, 락을 사용함을 나타내는 거짓을 반환한다.
 
 ```cpp
 struct A {
@@ -24,14 +25,14 @@ assert(!std::atomic<A>{}.is_lock_free());
 assert(std::atomic<B>{}.is_lock_free());
 ```
 
-* 原子操作的主要用处是替代 mutex 实现同步。如果原子操作内部是用 mutex 实现的，就不会有期望的性能提升，还不如直接用 mutex 来同步。C++17 中每个原子类型都有一个 [is_always_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_always_lock_free) 成员变量，为 true 时表示该原子类型在此平台上 lock-free
+* atomic 오퍼레이션의 주요 용도는 동기화를 위해 뮤텍스를 대체하는 것이다. 뮤텍스를 사용하여 내부적으로 원자 연산을 구현하는 경우, 성능 향상을 기대할 수 없으며 뮤텍스와 직접 동기화하는 것이 좋다. C++17의 각 원자 타입에는 [is_always_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_always_lock_free ) 멤버 변수가 있으며, 참이면 해당 원자 타입이 이 플랫폼에서 lock이 해제되어 있음을 의미한다.
 
 ```cpp
 assert(std::atomic<int>{}.is_always_lock_free);
 ```
 
-* C++17 之前可以用标准库为各个原子类型定义的 [ATOMIC_xxx_LOCK_FREE](https://en.cppreference.com/w/c/atomic/ATOMIC_LOCK_FREE_consts) 宏来判断该类型是否无锁，值为 0 表示原子类型是有锁的，为 2 表示无锁，为 1 表示运行时才能确定
-
+* C++17 이전에는 각 원자 유형에 대해 표준 라이브러리에 정의된 [ATOMIC_xxx_LOCK_FREE](https://en.cppreference.com/w/c/atomic/ATOMIC_LOCK_FREE_consts) 매크로를 사용하여 해당 유형의 잠금 여부를 확인할 수 있으며, 0 값은 해당 원자 타입이 잠기지 않았음을 나타낸다. 값이 0이면 타입이 잠겨 있음을, 2이면 잠겨 있지 않음을 1이면 런타임에만 확인할 수 있음을 의미한다.  
+  
 ```cpp
 // LOCK-FREE PROPERTY
 #define ATOMIC_BOOL_LOCK_FREE 2
@@ -48,9 +49,9 @@ assert(std::atomic<int>{}.is_always_lock_free);
 #define ATOMIC_LLONG_LOCK_FREE  2
 #define ATOMIC_POINTER_LOCK_FREE  2
 ```
-
-* 只有 [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 未提供 is_lock_free，该类型是一个简单的布尔标志，所有操作都保证 lock-free。基于 [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 就能实现一个简单的锁，并实现其他基础原子类型。其余原子类型可以通过特化 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 来实现，且可以有更完整的功能，但不保证 lock-free
-* 标准库中为 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 对内置类型的特化定义了类型别名
+  
+* 모든 연산에 대해 무잠금을 보장하는 단순 부울 플래그인 [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 만이 is_lock_free를 제공하지 않는다. [atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag)를 사용하면 간단한 잠금을 구현하고 다른 기본 원자 타입을 구현할 수 있다. 나머지 원자 타입은 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic)을 특수화하여 구현할 수 있으며 더 완전한 기능을 가질 수 있지만 잠금이 없는 것이 보장되지는 않는다!
+* 타입 별칭은 내장 타입의 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 전문화를 위한 표준 라이브러리에 정의되어 있다.  
 
 ```cpp
 namespace std {
@@ -59,8 +60,8 @@ using atomic_char = std::atomic<char>;
 }  // namespace std
 ```
 
-* 通常类型 `std::atomic<T>` 的别名就是 `atomic_T`，只有以下几种例外：signed 缩写为 s，unsigned 缩写为 u，long long 缩写为 llong
-
+* 'std::atomic<T>' 타입의 일반적인 별칭은 `atomic_T` 이며, 다음과 같은 예외가 있다: signed는 s, unsigned는 u, longlong은 llong으로 축약
+  
 ```cpp
 namespace std {
 using atomic_schar = std::atomic<signed char>;
@@ -73,7 +74,7 @@ using atomic_ullong = std::atomic<unsigned long long>;
 }  // namespace std
 ```
 
-* 原子类型不允许由另一个原子类型拷贝赋值，因为拷贝赋值调用了两个对象，破坏了操作的原子性。但可以用对应的内置类型赋值
+* 원자 타입은 다른 원자 타입으로 복사 및 할당할 수 없다. 할당 복사 시 두 개의 객체가 호출되고 연산의 원자성이 파괴되므로 원자형은 복사 및 할당이 허용되지 않는다. 그러나 해당 기본 제공 타입을 사용할 수는 있다
 
 ```cpp
 T operator=(T desired) noexcept;
