@@ -83,29 +83,29 @@ atomic& operator=(const atomic&) = delete;
 atomic& operator=(const atomic&) volatile = delete;
 ```
 
-* 此外 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 为支持赋值提供了成员函数
+* [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 은 할당을 지원하는 멤버 함수를 제공한다.  
 
 ```cpp
-std::atomic<T>::store     // 替换当前值
-std::atomic<T>::load      // 返回当前值
-std::atomic<T>::exchange  // 替换值，并返回被替换前的值
+std::atomic<T>::store     // 현재 값을 바꾼다
+std::atomic<T>::load      // 현재 값을 반환한다
+std::atomic<T>::exchange  // 값을 바꾸고, 바꾸기 전의 값을 반환한다
 
-// 与期望值比较，不等则将期望值设为原子值并返回 false
-// 相等则将原子值设为目标值并返回 true
-// 在缺少 CAS（compare-and-exchange）指令的机器上，weak 版本在相等时可能替换失败并返回 false
-// 因此 weak 版本通常要求循环，而 strong 版本返回 false 就能确保不相等
+// 원하는 값과 비교, 같지 않으면 원하는 값을 원자 값으로 설정하고 거짓을 반환한다.
+// 같으면 원자 값을 목표 값으로 설정하고 참을 반환한다.
+// CAS(비교-교환) 명령어가 없는 머신에서는 약한 버전이 같을 때 대체하지 못하고 거짓을 반환할 수 있다.
+// 따라서 약한 버전은 일반적으로 루프가 필요한 반면, 강한 버전은 불평등을 보장하기 위해 거짓을 반환한다.
 std::atomic<T>::compare_exchange_weak
 std::atomic<T>::compare_exchange_strong
 
-std::atomic<T>::fetch_add        // 原子加法，返回相加前的值
-std::atomic<T>::fetch_sub        // 原子减法，返回相减前的值
+std::atomic<T>::fetch_add        // 더하기 전 값을 반환
+std::atomic<T>::fetch_sub        // 빼기 전 값을 반환
 std::atomic<T>::fetch_and
 std::atomic<T>::fetch_or
 std::atomic<T>::fetch_xor
-std::atomic<T>::operator++       // 前自增等价于 fetch_add(1) + 1
-std::atomic<T>::operator++(int)  // 后自增等价于 fetch_add(1)
-std::atomic<T>::operator--       // 前自减等价于 fetch_sub(1) - 1
-std::atomic<T>::operator--(int)  // 后自减等价于 fetch_sub(1)
+std::atomic<T>::operator++       // 사전 자기 증가는 fetch_add(1) + 1 와 같다
+std::atomic<T>::operator++(int)  // 사후 증가는 fetch_add(1) 와 같다
+std::atomic<T>::operator--       // 사전 뺄셈은 fetch_sub(1) - 1 에 해당한다
+std::atomic<T>::operator--(int)  // fetch_sub(1) 과 동등한 사후 감산
 std::atomic<T>::operator+=       // fetch_add(x) + x
 std::atomic<T>::operator-=       // fetch_sub(x) - x
 std::atomic<T>::operator&=       // fetch_and(x) & x
@@ -113,8 +113,8 @@ std::atomic<T>::operator|=       // fetch_or(x) | x
 std::atomic<T>::operator^=       // fetch_xor(x) ^ x
 ```
 
-* 这些成员函数有一个用来指定内存序的参数 [std::memory_order](https://en.cppreference.com/w/cpp/atomic/memory_order)，后续会解释内存序的含义
-
+* 멤버 함수에는 메모리 순서를 지정하는 데 사용되는 매개 변수 [std::memory_order](https://en.cppreference.com/w/cpp/atomic/memory_order) 가 있으며 이것은 다음에 설명한다  
+  
 ```cpp
 typedef enum memory_order {
   memory_order_relaxed,
@@ -126,27 +126,27 @@ typedef enum memory_order {
 } memory_order;
 
 void store(T desired, std::memory_order order = std::memory_order_seq_cst);
-// store 的内存序只能是
+// store 메모리 순서는 다음과 같다
 // memory_order_relaxed、memory_order_release、memory_order_seq_cst
 T load(std::memory_order order = std::memory_order_seq_cst);
-// load 的内存序只能是
+// load 메모리 순서는 다음과 같다
 // memory_order_relaxed、memory_order_consume、memory_order_acquire、memory_order_seq_cst
 ```
 
 ### [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag)
 
-* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 是一个原子的布尔类型，也是唯一保证 lock-free 的原子类型，只能用 [ATOMIC_FLAG_INIT](https://en.cppreference.com/w/cpp/atomic/ATOMIC_FLAG_INIT) 初始化为 false
+* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 는 atomic bool 이며 잠금이 없는 것이 보장되는 유일한 atomic 타입으로[ATOMIC_FLAG_INIT](https://en.cppreference.com/w/cpp/atomic/ATOMIC_FLAG_INIT) 로 false으로 초기화해야 한다
 
 ```cpp
 std::atomic_flag x = ATOMIC_FLAG_INIT;
 
-x.clear(std::memory_order_release);  // 将状态设为 false
-// 不能为读操作语义：memory_order_consume、memory_order_acquire、memory_order_acq_rel
+x.clear(std::memory_order_release);  // 상태를 false 으로 설정
+// 연산 의미를 읽을 수 없다：memory_order_consume、memory_order_acquire、memory_order_acq_rel
 
-bool y = x.test_and_set();  // 将状态设为 true 且返回之前的值
+bool y = x.test_and_set();  // 상태를 true로 설정하고 이전 값을 반환
 ```
 
-* 用 [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 实现自旋锁
+* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 로 스핀락 구현하기  
 
 ```cpp
 #include <atomic>
@@ -188,41 +188,41 @@ int main() {
 }
 ```
 
-### 其他原子类型
+### 기타 atomic 타입
 
-* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 功能过于局限，甚至无法像布尔类型一样使用，相比之下，`std::atomic<bool>` 更易用，它不保证 lock-free，可以用 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free) 检验在当前平台上是否 lock-free
-
+* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag)는 사용하기 쉽고 잠금을 보장하지 않는 `std::atomic<bool>`에 비해 bool로도 사용하기에는 너무 제한적이다. 없는 경우 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free)를 사용하여 현재 플랫폼에서 lock-free 여부를 확인할 수 있다.  
+  
 ```cpp
 std::atomic<bool> x(true);
 x = false;
-bool y = x.load(std::memory_order_acquire);  // 读取 x 值返回给 y
-x.store(true);                               // x 写为 true
+bool y = x.load(std::memory_order_acquire);  
+x.store(true);                               
 y = x.exchange(false,
-               std::memory_order_acq_rel);  // x 用 false 替换，并返回旧值给 y
-bool expected = false;                      // 期望值
-// 不等则将期望值设为 x 并返回 false，相等则将 x 设为目标值 true 并返回 true
-// weak 版本在相等时也可能替换失败而返回 false，因此一般用于循环
+               std::memory_order_acq_rel);  // x는 false로 대체되고 이전 값은 y로 반환
+bool expected = false;                      
+// 같지 않음은 예상 값을 x로 설정하고 거짓을 반환하고, 같음은 x를 대상 값 참으로 설정하고 참을 반환한다.
+// 약한 버전은 같을 때 대체에 실패하고 거짓을 반환할 수도 있으므로 일반적으로 루프에서 사용된다.
 while (!x.compare_exchange_weak(expected, true) && !expected) {
 }
-// 对于只有两种值的 std::atomic<bool> 来说显得有些繁琐
-// 但对其他原子类型来说，这个影响就大了
+// 값이 두 개만 있는 std::atomic<bool>의 경우 약간 번거롭다
+// 하지만 다른 atomic 타입의 경우 큰 영향을 미친다.
 ```
 
-* 指针原子类型 `std::atomic<T*>` 也支持 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free)、[load](https://en.cppreference.com/w/cpp/atomic/atomic/load)、[store](https://en.cppreference.com/w/cpp/atomic/atomic/store)、[exchange](https://en.cppreference.com/w/cpp/atomic/atomic/exchange)、[compare_exchange_weak、compare_exchange_strong](https://en.cppreference.com/w/cpp/atomic/atomic/compare_exchange)，与 `std::atomic<bool>` 语义相同，只不过读取和返回的类型是 `T*` 而非 bool。此外指针原子类型还支持运算操作：[fetch_add](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_add)、[fetch_sub](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_sub)、[++、--](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith)、[+=、-=](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith2)
+* `std::atomic<T*>` 도 지원한다, [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free)、[load](https://en.cppreference.com/w/cpp/atomic/atomic/load)、[store](https://en.cppreference.com/w/cpp/atomic/atomic/store)、[exchange](https://en.cppreference.com/w/cpp/atomic/atomic/exchange)、[compare_exchange_weak、compare_exchange_strong](https://en.cppreference.com/w/cpp/atomic/atomic/compare_exchange), `std::atomic<bool>` 읽기 및 반환 유형이 bool 대신 'T*'이고 포인터 원자 유형이 산술 연산도 지원한다는 점을 제외하면 의미는 동일：[fetch_add](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_add)、[fetch_sub](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_sub)、[++、--](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith)、[+=、-=](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith2)  
 
 ```cpp
 class A {};
 A a[5];
-std::atomic<A*> p(a);   // p 为 &a[0]
-A* x = p.fetch_add(2);  // p 为 &a[2]，并返回原始值 a[0]
+std::atomic<A*> p(a);   
+A* x = p.fetch_add(2);  // p에 대해 &a[2]를 대체하고, 원래 값 a[0]을 반환
 assert(x == a);
 assert(p.load() == &a[2]);
-x = (p -= 1);  // p 为 &a[1]，并返回给 x，相当于 x = p.fetch_sub(1) - 1
+x = (p -= 1);  // p는 &a[1]이며 x로 반환되며, 이는 x = p.fetch_sub(1) - 1과 동일
 assert(x == &a[1]);
 assert(p.load() == &a[1]);
 ```
 
-* 整型原子类型（如 `std::atomic<int>`）在上述操作之外还支持 [fetch_or](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_or)、[fetch_and](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_and)、[fetch_xor](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_xor)、[\|=、&=、^=](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith2)
+* 정수 atomic 타입(예 `std::atomic<int>`) 은 위의 연산 외에도 [fetch_or](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_or)、[fetch_and](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_and)、[fetch_xor](https://en.cppreference.com/w/cpp/atomic/atomic/fetch_xor)、[\|=、&=、^=](https://en.cppreference.com/w/cpp/atomic/atomic/operator_arith2) 를 지원한다
 
 ```cpp
 std::atomic<int> i(5);
@@ -231,7 +231,7 @@ assert(i == 1);
 assert(j == 5);
 ```
 
-* 用整型原子类型实现 Spinlock
+* 정수 atomic 타입으로 Spinlock 구현하기
 
 ```cpp
 #include <atomic>
@@ -253,7 +253,7 @@ class Spinlock {
 };
 ```
 
-* 用整型原子类型实现 SharedSpinlock
+* 정수 atomic 타입으로 SharedSpinlock 구현하기
 
 ```cpp
 #include <atomic>
@@ -292,7 +292,7 @@ class SharedSpinlock {
 };
 ```
 
-* 用整型原子类型实现 Barrier
+* 정수 atomic 타입으로 Barrier 구현하기
 
 ```cpp
 #include <atomic>
@@ -323,13 +323,13 @@ class Barrier {
   }
 
  private:
-  std::atomic<unsigned> count_;       // 需要同步的线程数
-  std::atomic<unsigned> spaces_;      // 剩余未到达 Barrier 的线程数
-  std::atomic<unsigned> generation_;  // 所有线程到达 Barrier 的总次数
+  std::atomic<unsigned> count_;       // 동기화할 스레드 수
+  std::atomic<unsigned> spaces_;      // Barrier 에 도달하기 위해 남은 스레드 수
+  std::atomic<unsigned> generation_;  // 모든 스레드가 Barrier 에 도달한 총 횟수
 };
 ```
 
-* 如果原子类型是自定义类型，该自定义类型必须[可平凡复制（trivially copyable）](https://en.cppreference.com/w/cpp/named_req/TriviallyCopyable)，也就意味着该类型不能有虚函数或虚基类。这可以用 [is_trivially_copyable](https://en.cppreference.com/w/cpp/types/is_trivially_copyable) 检验
+* 원자 유형이 사용자 정의 유형인 경우, 사용자 정의 유형은 [trivially copyable](https://en.cppreference.com/w/cpp/named_req/TriviallyCopyable), 즉 가상 함수나 가상 베이스 클래스를 가질 수 없는 유형이어야 한다. 이는 [is_trivially_copyable](https://en.cppreference.com/w/cpp/types/is_trivially_copyable)로 확인할 수 있다.
 
 ```cpp
 class A {
@@ -338,9 +338,9 @@ class A {
 };
 
 assert(!std::is_trivially_copyable_v<A>);
-std::atomic<A> a;                 // 错误：A 不满足 trivially copyable
-std::atomic<std::vector<int>> v;  // 错误
-std::atomic<std::string> s;       // 错误
+std::atomic<A> a;                 // 오류：A 는 trivially copyable 
+std::atomic<std::vector<int>> v;  // 오류
+std::atomic<std::string> s;       // 오류
 ```
 
 * 自定义类型的原子类型不允许运算操作，只允许 [is_lock_free](https://en.cppreference.com/w/cpp/atomic/atomic/is_lock_free)、[load](https://en.cppreference.com/w/cpp/atomic/atomic/load)、[store](https://en.cppreference.com/w/cpp/atomic/atomic/store)、[exchange](https://en.cppreference.com/w/cpp/atomic/atomic/exchange)、[compare_exchange_weak、compare_exchange_strong](https://en.cppreference.com/w/cpp/atomic/atomic/compare_exchange)，以及赋值操作和向自定义类型转换的操作
@@ -376,7 +376,7 @@ bool atomic_compare_exchange_weak_explicit(
     std::memory_order fail);
 ```
 
-* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag) 对应的自由函数的前缀不是 `atomic_` 而是 `atomic_flag_`，但接受内存序参数的版本一样是 `_explicit` 后缀
+* [std::atomic_flag](https://en.cppreference.com/w/cpp/atomic/atomic_flag)는 `atomic_`가 아닌 `atomic_flag_`가 접두사로 붙은 자유 함수에 해당하지만 메모리 순서 인자와 `_ 명시적` 접미사가 붙은 버전도 허용한다.    
 
 ```cpp
 std::atomic_flag x = ATOMIC_FLAG_INIT;
@@ -384,7 +384,7 @@ bool y = std::atomic_flag_test_and_set_explicit(&x, std::memory_order_acquire);
 std::atomic_flag_clear_explicit(&x, std::memory_order_release);
 ```
 
-* C++20 允许 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 的模板参数为 [std::shared_ptr](https://en.cppreference.com/w/cpp/memory/shared_ptr)
+* C++20 은 [std::atomic](https://en.cppreference.com/w/cpp/atomic/atomic) 을 [std::shared_ptr](https://en.cppreference.com/w/cpp/memory/shared_ptr)의 모듈 참조로 허용한다
 
 ```cpp
 std::atomic<std::shared_ptr<int>> x;
@@ -887,7 +887,7 @@ int main() {
 }
 ```
 
-* 将 x 替换为非原子 bool 类型，行为也一样
+* x를 atomic 이 아닌 bool 타입으로 대체하면 동일한 동작이 발생한다.   
 
 ```cpp
 #include <atomic>
