@@ -1,20 +1,22 @@
-* 设计并发数据结构要考虑两点，一是确保访问 thread-safe，二是提高并发度
-  * thread-safe 基本要求如下
-    * 数据结构的不变量（invariant）被一个线程破坏时，确保不被线程看到此状态
-    * 提供操作完整的函数来避免数据结构接口中固有的 race condition
-    * 注意数据结构出现异常时的行为，以确保不变量不被破坏
-    * 限制锁的范围，避免可能的嵌套锁，最小化死锁的概率
-  * 作为数据结构的设计者，要提高数据结构的并发度，可以从以下角度考虑
-    * 部分操作能否在锁的范围外执行
-    * 数据结构的不同部分是否被不同的 mutex 保护
-    * 是否所有操作需要同级别的保护
-    * 在不影响操作语义的前提下，能否对数据结构做简单的修改提高并发度
-  * 总结为一点，即最小化线程对共享数据的轮流访问，最大化真实的并发量
-
+* 동시 데이터 구조의 설계는 두 가지를 고려해야 하는데 하나는 스레드 안전 액세스를 보장하는 것이고 다른 하나는 동시성 수준을 높이는 것이다.
+  * 기본적인 스레드 안전 요구 사항은 다음과 같다.
+    * 데이터 구조의 불변성이 스레드에 의해 손상되었을 때 스레드에 표시되지 않도록 한다.
+    * 데이터 구조의 인터페이스에 내재된 경합 조건을 피하기 위해 작동적으로 완전한 함수를 제공한다.
+    * 예외 발생 시 데이터 구조의 동작에 주의를 기울여 불변성이 파괴되지 않도록 한다.
+    * 중첩 잠금이 발생하지 않도록 잠금 범위를 제한하고 교착 상태의 가능성을 최소화한다.
+  * 데이터 구조 설계자는 데이터 구조의 동시성을 개선하기 위해 다음과 같은 관점을 고려할 수 있다.
+    * 일부 연산이 잠금 범위 밖에서 실행될 수 있는지 여부
+    * 데이터 구조의 다른 부분이 다른 뮤텍스에 의해 보호되는지 여부
+    * 모든 연산을 동일한 수준에서 보호해야 하는지 여부
+    * 연산의 의미론에 영향을 주지 않고 동시성을 향상시키기 위해 데이터 구조를 간단하게 수정할 수 있는지 여부.
+  * 공유 데이터에 번갈아 액세스하는 스레드를 최소화하고 실제 동시성을 최대화하는 등 한 가지로 요약할 수 있다.
+  
+  
 ## thread-safe queue
 
 * 之前实现过的 thread-safe stack 和 queue 都是用一把锁定保护整个数据结构，这限制了并发性，多线程在成员函数中阻塞时，同一时间只有一个线程能工作。这种限制主要是因为内部实现使用的是 [std::queue](https://en.cppreference.com/w/cpp/container/queue)，为了支持更高的并发，需要更换内部的实现方式，使用细粒度的（fine-grained）锁。最简单的实现方式是包含头尾指针的单链表，不考虑并发的单链表实现如下
-
+* 이전에 구현된 스레드 세이프한 스택과 큐는 모두 소수의 잠금으로 전체 데이터 구조를 보호하므로 멤버 함수에서 여러 스레드가 차단되는 경우 한 번에 하나의 스레드만 작동할 수 있다는 점에서 동시성을 제한한다. 이러한 제한은 주로 내부 구현이 [std::queue](https://en.cppreference.com/w/cpp/container/queue )를 사용하기 때문이며, 더 높은 동시성을 지원하려면 내부 구현을 세분화된 잠금으로 대체해야 한다. 가장 간단한 구현은 헤드와 테일 포인터를 포함하는 단일 링크된 테이블이다. 동시성을 고려하지 않은 단일 링크된 테이블 구현은 다음과 같다.    
+  
 ```cpp
 #include <memory>
 #include <utility>
@@ -59,11 +61,11 @@ class Queue {
   std::unique_ptr<Node> head_;
   Node* tail_ = nullptr;
 };
-```
-
-* 即使用两个 mutex 分别保护头尾指针，这个实现在多线程下也有明显问题。push 可以同时修改头尾指针，会对两个 mutex 上锁，另外仅有一个元素时头尾指针相等，push 写和 try_pop 读的 next 节点是同一对象，产生了竞争，锁的也是同一个 mutex
-* 该问题很容易解决，在头节点前初始化一个 dummy 节点即可，这样 push 只访问尾节点，不会再与 try_pop 竞争头节点
-
+```  
+  
+* 즉, 두 개의 뮤텍스를 사용하여 헤드와 테일 포인터를 보호하는 이 구현은 멀티스레딩에서도 명백한 문제가 있다. push는 헤드와 테일 포인터를 동시에 수정할 수 있고, 두 뮤텍스를 잠그며 요소가 하나만 있을 때 헤드와 테일 포인터가 같으면 push가 쓰고 try_pop이 읽는 다음 노드는 동일한 객체이므로 경쟁이 발생하고 잠금도 동일한 뮤텍스에 있다.  
+* 이 문제는 더미 노드를 헤드 노드보다 먼저 초기화하면 쉽게 해결할 수 있으므로 push는 테일 노드에만 접근하고 헤드 노드에 대한 try_pop과 경쟁하지 않는다.  
+  
 ```cpp
 #include <memory>
 #include <utility>
@@ -106,9 +108,9 @@ class Queue {
   Node* tail_ = nullptr;
 };
 ```
-
-* 接着加上锁，锁的范围应该尽可能小
-
+  
+* 그런 다음 가능한 한 작게 lock을 추가한다  
+  
 ```cpp
 #include <memory>
 #include <mutex>
@@ -168,9 +170,9 @@ class ConcurrentQueue {
   std::mutex tail_mutex_;
 };
 ```
-
-* push 中创建新值和新节点都没上锁，多线程可用并发创建新值和新节点。虽然同时只有一个线程能添加新节点，但这只需要一个指针赋值操作，锁住尾节点的时间很短，try_pop 中对尾节点只是用来做一次比较，持有尾节点的时间同样很短，因此 try_pop 和 push 几乎可以同时调用。try_pop 中锁住头节点所做的也只是指针赋值操作，开销较大的析构在锁外进行，这意味着虽然同时只有一个线程能 pop_head，但允许多线程删除节点并返回数据，提升了 try_pop 的并发调用数量
-* 最后再结合 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable) 实现 wait_and_pop，即得到与之前接口相同但并发度更高的 thread-safe queue
+  
+* push는 새 값과 잠금 해제된 새 노드를 모두 생성하며 여러 스레드를 사용하여 새 값과 새 노드를 동시에 생성할 수 있다. 하나의 스레드만 동시에 새 노드를 추가할 수 있지만 포인터 할당 연산만 필요하고 꼬리 노드를 잠그는 시간이 매우 짧다. try_pop은 꼬리 노드를 비교하는데만 사용되며 꼬리 노드를 보유하는 시간도 매우 짧으므로 try_pop과 push를 거의 동시에 호출할 수 있다. try_pop은 포인터 할당 연산만 하는 헤드 노드를 잠그기 때문에 오버헤드가 높다. 즉, 하나의 스레드만 동시에 pop_head를 호출할 수 있지만 여러 스레드가 노드를 삭제하고 데이터를 반환할 수 있으므로 try_pop에 대한 동시 호출 횟수가 증가한다.
+* 마지막으로 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable)과 함께 wait_and_pop을 구현하면 이전과 동일한 인터페이스를 제공하지만 동시 스레드 수가 더 많아진니다
 
 ```cpp
 #include <condition_variable>
@@ -284,12 +286,12 @@ class ConcurrentQueue {
 ```
 
 ## thread-safe map
-
-* 并发访问 [std::map](https://en.cppreference.com/w/cpp/container/map) 和 [std::unordered_map](https://en.cppreference.com/w/cpp/container/unordered_map) 的接口的问题在于迭代器，其他线程删除元素时会导致迭代器失效，因此 thread-safe map 的接口设计就要跳过迭代器
-* 为了使用细粒度锁，就不应该使用标准库容器。可选的关联容器数据结构有三种，一是二叉树（如红黑树），但每次查找修改都要从访问根节点开始，也就表示根节点需要上锁，尽管沿着树向下访问节点时会解锁，但这个比起覆盖整个数据结构的单个锁好不了多少
-* 第二种方式是有序数组，这比二叉树还差，因为无法提前得知一个给定的值应该放在哪，于是同样需要一个覆盖整个数组的锁
-* 第三种方式是哈希表。假如有一个固定数量的桶，一个 key 属于哪个桶取决于 key 的属性和哈希函数，这意味着可以安全地分开锁住每个桶。如果使用读写锁，就能将并发度提高相当于桶数量的倍数
-
+    
+* [std::map](https://en.cppreference.com/w/cpp/container/map) 및 [std::unordered_map](https://en.cppreference.com/w/cpp/container/unordered_map)에 대한 동시 액세스. 인터페이스는 요소를 삭제하는 다른 스레드에 의해 무효화되는 이터레이터에 문제가 있으므로 스레드 세이프한 맵 인터페이스는 이터레이터를 건너뛰도록 설계되었다.
+* 세분화된 잠금을 사용하려면 표준 라이브러리 컨테이너를 사용해서는 안 된다. 연관 컨테이너를 위한 세 가지 대체 데이터 구조가 있다. 하나는 이진 트리(예: 빨간색-검정색 트리)이지만 각 조회 수정은 루트 노드에 액세스하는 것으로 시작되므로 루트 노드를 잠가야 하며 트리 아래쪽 노드에 액세스하면 잠금이 해제되더라도 전체 데이터 구조를 포괄하는 단일 잠금보다 낫지 않다.
+* 두 번째 방법은 정렬된 배열로 주어진 값이 어디에 위치해야 하는지 미리 알 수 없기 때문에 전체 배열을 커버하는 잠금도 필요하므로 이진 트리보다 나쁘다다.
+* 세 번째 방법은 해시 테이블이다. 고정된 수의 버킷이 있고 키의 속성과 해시 함수에 따라 키가 속한 버킷이 달라지는 경우, 각 버킷을 개별적으로 안전하게 잠글 수 있다는 의미이다. 읽기/쓰기 잠금을 사용하는 경우 버킷 개수의 배수만큼 동시성을 높일 수 있다.  
+    
 ```cpp
 #include <algorithm>
 #include <functional>
@@ -304,7 +306,7 @@ class ConcurrentQueue {
 template <typename K, typename V, typename Hash = std::hash<K>>
 class ConcurrentMap {
  public:
-  // 桶数默认为 19（一般用 x % 桶数作为 x 的桶索引，桶数为质数可使桶分布均匀）
+  // 버킷 수는 기본값이 19개이다(일반적으로 버킷 수의 x %가 x에 대한 버킷의 인덱스로 사용된다. 버킷 수가 소수이면 버킷이 균등하게 분포된다).
   ConcurrentMap(std::size_t n = 19, const Hash& h = Hash{})
       : buckets_(n), hasher_(h) {
     for (auto& x : buckets_) {
@@ -324,7 +326,7 @@ class ConcurrentMap {
 
   void erase(const K& k) { get_bucket(k).erase(k); }
 
-  // 为了方便使用，提供一个到 std::map 的映射
+  // 사용하기 쉽도록 std::map에 매핑을 제공
   std::map<K, V> to_map() const {
     std::vector<std::unique_lock<std::shared_mutex>> locks;
     for (auto& x : buckets_) {
@@ -342,29 +344,29 @@ class ConcurrentMap {
  private:
   struct Bucket {
     std::list<std::pair<K, V>> data;
-    mutable std::shared_mutex m;  // 每个桶都用这个锁保护
+    mutable std::shared_mutex m;  // 모든 배럴은 이 잠금 장치로 보호
 
     V get(const K& k, const V& default_value) const {
-      // 没有修改任何值，异常安全
-      std::shared_lock<std::shared_mutex> l(m);  // 只读锁，可共享
+      // 값이 수정되지 않아 비정상적으로 안전함
+      std::shared_lock<std::shared_mutex> l(m);  // 읽기 전용 잠금, 공유 가능
       auto it = std::find_if(data.begin(), data.end(),
                              [&](auto& x) { return x.first == k; });
       return it == data.end() ? default_value : it->second;
     }
 
     void set(const K& k, const V& v) {
-      std::unique_lock<std::shared_mutex> l(m);  // 写，单独占用
+      std::unique_lock<std::shared_mutex> l(m);  // 쓰기, 단독 점유 
       auto it = std::find_if(data.begin(), data.end(),
                              [&](auto& x) { return x.first == k; });
       if (it == data.end()) {
-        data.emplace_back(k, v);  // emplace_back 异常安全
+        data.emplace_back(k, v);  // emplace_back 
       } else {
-        it->second = v;  // 赋值可能抛异常，但值是用户提供的，可放心让用户处理
+        it->second = v;  // 할당은 예외를 발생시킬 수 있지만 값은 사용자가 제공하므로 사용자가 안전하게 처리할 수 있다
       }
     }
 
     void erase(const K& k) {
-      std::unique_lock<std::shared_mutex> l(m);  // 写，单独占用
+      std::unique_lock<std::shared_mutex> l(m);  // 쓰기, 단독 점유
       auto it = std::find_if(data.begin(), data.end(),
                              [&](auto& x) { return x.first == k; });
       if (it != data.end()) {
@@ -373,7 +375,7 @@ class ConcurrentMap {
     }
   };
 
-  Bucket& get_bucket(const K& k) const {  // 桶数固定因此可以无锁调用
+  Bucket& get_bucket(const K& k) const {  // 버킷 수는 고정되어 있으므로 잠금 없이 호출할 수 있다
     return *buckets_[hasher_(k) % buckets_.size()];
   }
 
@@ -416,10 +418,10 @@ class ConcurrentList {
     std::unique_lock<std::mutex> head_lock(head_.m);
     while (Node* const next = cur->next.get()) {
       std::unique_lock<std::mutex> next_lock(next->m);
-      head_lock.unlock();  // 锁住了下一节点，因此可以释放上一节点的锁
+      head_lock.unlock();  // 이전 노드의 잠금을 해제할 수 있도록 다음 노드를 잠근다
       f(*next->data);
-      cur = next;                        // 当前节点指向下一节点
-      head_lock = std::move(next_lock);  // 转交下一节点锁的所有权，循环上述过程
+      cur = next;                        // 현재 노드가 다음 노드를 가리킴
+      head_lock = std::move(next_lock);  // 위의 과정을 반복하면서 다음 노드의 잠금 소유권을 이전한다
     }
   }
 
@@ -431,7 +433,7 @@ class ConcurrentList {
       std::unique_lock<std::mutex> next_lock(next->m);
       head_lock.unlock();
       if (f(*next->data)) {
-        return next->data;  // 返回目标值，无需继续查找
+        return next->data;  // 추가 검색 없이 목표 값을 반환
       }
       cur = next;
       head_lock = std::move(next_lock);
@@ -445,11 +447,11 @@ class ConcurrentList {
     std::unique_lock<std::mutex> head_lock(head_.m);
     while (Node* const next = cur->next.get()) {
       std::unique_lock<std::mutex> next_lock(next->m);
-      if (f(*next->data)) {  // 为 true 则移除下一节点
+      if (f(*next->data)) {  // true 이면 다음 노드를 제거
         std::unique_ptr<Node> old_next = std::move(cur->next);
-        cur->next = std::move(next->next);  // 下一节点设为下下节点
+        cur->next = std::move(next->next);  // 다음 노드를 다음 노드로 설정
         next_lock.unlock();
-      } else {  // 否则继续转至下一节点
+      } else {  // 그렇지 않으면 다음 노드로 계속 진행
         head_lock.unlock();
         cur = next;
         head_lock = std::move(next_lock);
