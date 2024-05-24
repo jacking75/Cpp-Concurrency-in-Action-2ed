@@ -1,7 +1,7 @@
-## 线程池
-
-* 线程池一般会用一个表示线程数的参数来初始化，内部需要一个队列来存储任务。下面是一个最简单的线程池实现
-
+## 스레드 풀
+  
+* 스레드 풀은 일반적으로 스레드 수를 나타내는 매개 변수로 초기화되며 내부적으로 작업을 저장할 대기열이 필요하다. 다음은 가장 간단한 스레드 풀 구현 중 하나이다.
+  
 ```cpp
 #include <condition_variable>
 #include <functional>
@@ -36,7 +36,7 @@ class ThreadPool {
   ~ThreadPool() {
     {
       std::lock_guard<std::mutex> l(m_);
-      done_ = true;  // cv_.wait 使用了 done_ 判断所以要加锁
+      done_ = true;  // cv_.wait는 done_ 판단을 사용하므로 잠금이 추가된다
     }
     cv_.notify_all();
   }
@@ -58,28 +58,28 @@ class ThreadPool {
 };
 ```
 
-* 如果想让提交的任务带参数会麻烦很多
-
+* 제출된 작업을 매개 변수로 만들려면 훨씬 더 번거로울 것이다  
+  
 ```cpp
 template <class F, class... Args>
 auto ThreadPool::submit(F&& f, Args&&... args) {
   using RT = std::invoke_result_t<F, Args...>;
-  // std::packaged_task 不允许拷贝构造，不能直接传入 lambda，
-  // 因此要借助 std::shared_ptr
+  // std::packaged_task는 복사 구문을 허용하지 않으며 람다에 직접 전달할 수 없다
+  // 따라서 std::shared_ptr을 사용해야 한다
   auto task = std::make_shared<std::packaged_task<RT()>>(
       std::bind(std::forward<F>(f), std::forward<Args>(args)...));
-  // 但 std::bind 会按值拷贝实参，因此这个实现不允许任务的实参是 move-only 类型
+  // 그러나 std::bind는 실제 매개변수를 값으로 복사하므로 이 구현에서는 작업의 실제 매개변수가 이동 전용 유형일 수 없다
   {
     std::lock_guard<std::mutex> l(m_);
-    q_.emplace([task]() { (*task)(); });  // 捕获指针以传入 std::packaged_task
+    q_.emplace([task]() { (*task)(); });  // std::packaged_task로 전달할 포인터 캡처
   }
   cv_.notify_one();
   return task->get_future();
 }
 ```
 
-* 书上实现的线程池都在死循环中使用了 [std::this_thread::yield](https://en.cppreference.com/w/cpp/thread/yield) 来转让时间片
-
+* 스레드 풀의 책 구현은 모두 데드 루프에서 시간 조각을 전송하기 위해 [std::this_thread::yield](https://en.cppreference.com/w/cpp/thread/yield)를 사용한다
+  
 ```cpp
 #include <atomic>
 #include <functional>
@@ -136,20 +136,20 @@ class ThreadPool {
  private:
   std::atomic<bool> done_ = false;
   ConcurrentQueue<std::function<void()>> q_;
-  std::vector<std::thread> threads_;  // 要在 done_ 和 q_ 之后声明
+  std::vector<std::thread> threads_;   
 };
 ```
-
-* 这样做的问题是，如果线程池处于空闲状态，就会无限转让时间片，导致 CPU 使用率达 100%，下面是对书中的线程池的 CPU 使用率测试结果
-
+  
+* 이 경우의 문제점은 스레드 풀이 유휴 상태이면 타임 슬라이스를 무한정 전송하여 다음 책에 있는 스레드 풀의 CPU 사용량 테스트에서 볼 수 있듯이 100% CPU 사용량을 초래한다는 것이다
+  
 ![](images/8-1.png)
 
-* 对相同任务用之前实现的线程池的测试结果
+* 동일한 작업에 대해 이전에 구현된 스레드 풀을 사용한 테스트 결과
 
 ![](images/8-2.png)
-
-* 这里还是把书上的内容列出来，下文均为书中内容
-* 这个线程池只能执行无参数无返回值的函数，并且可能出现死锁，下面希望能执行无参数但有返回值的函数。为了得到返回值，就应该把函数传递给 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 再加入队列，并返回 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 中的 [std::future](https://en.cppreference.com/w/cpp/thread/future)。由于 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 是 move-only 类型，而 [std::function](https://en.cppreference.com/w/cpp/utility/functional/function) 要求存储的函数实例可以拷贝构造，因此这里需要实现一个支持 move-only 类型的函数包裹类，即一个带 call 操作的类型擦除（type-erasure）类
+  
+* 다음은 여전히 책에 나와 있는 내용이다.
+* 이 스레드 풀은 매개변수가 없고 반환값이 없는 함수만 실행할 수 있으며, 데드락이 발생할 수 있으므로 매개변수는 없지만 반환값이 있는 함수를 실행할 수 있도록 하려면 다음과 같이 해야 한다. 반환값을 얻으려면 함수를 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task)에 전달한 다음 대기열에 추가하고 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task)를 [std::future](https://en.cppreference.com/w/cpp/thread/future)에 반환한다. [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task)는 이동 전용 유형이고, [std::function](https://en.cppreference.com/w/cpp/utility/functional/function)는 저장된 함수 인스턴스를 복사-구성할 수 있어야 하므로 이동 전용 타입을 지원하는 함수 래퍼 클래스, 즉 호출 연산이 있는 타입 삭제 클래스를 구현해야 한다.
 
 ```cpp
 #include <memory>
@@ -194,9 +194,9 @@ class FunctionWrapper {
   std::unique_ptr<ImplBase> impl_;
 };
 ```
-
-* 用这个包裹类替代 `std::function<void()>`
-
+  
+* `std::function<void()>`를 이 래퍼 클래스로 바꾼다
+  
 ```cpp
 #include <atomic>
 #include <future>
@@ -258,12 +258,12 @@ class ThreadPool {
  private:
   std::atomic<bool> done_ = false;
   ConcurrentQueue<FunctionWrapper> q_;
-  std::vector<std::thread> threads_;  // 要在 done_ 和 q_ 之后声明
+  std::vector<std::thread> threads_;  
 };
 ```
-
-* 往线程池添加任务会增加任务队列的竞争，lock-free 队列可以避免这点但存在乒乓缓存的问题。为此需要把任务队列拆分为线程独立的本地队列和全局队列，当线程队列无任务时就去全局队列取任务
-
+  
+* 스레드 풀에 작업을 추가하면 작업 대기열의 경쟁이 증가하는데 이는 잠금 없는 대기열을 사용하면 피할 수 있지만 핑퐁 캐싱 문제가 있다. 이렇게 하려면 작업 대기열을 스레드에 독립적인 로컬 대기열과 전역 대기열로 분할하여 스레드 대기열이 비어 있으면 전역 대기열에서 작업을 가져올 수 있도록 해야 한다.
+  
 ```cpp
 #include <atomic>
 #include <future>
@@ -341,9 +341,9 @@ class ThreadPool {
   std::vector<std::thread> threads_;
 };
 ```
-
-* 这可以避免数据竞争，但如果任务分配不均，就会导致某个线程的本地队列中有很多任务，而其他线程无事可做，为此应该让没有工作的线程可以从其他线程获取任务
-
+  
+* 이렇게 하면 데이터 경합을 피할 수 있지만 작업이 고르지 않게 분산되면 다른 스레드가 할 일이 없는 동안 스레드가 로컬 대기열에 많은 작업을 보유하게 될 수 있으므로 작동하지 않는 스레드가 다른 스레드에서 작업을 가져올 수 있어야 한다.
+    
 ```cpp
 #include <atomic>
 #include <deque>
@@ -488,11 +488,12 @@ class ThreadPool {
 thread_local WorkStealingQueue* ThreadPool::local_queue_;
 thread_local std::size_t ThreadPool::index_;
 ```
+  
 
-## 中断
-
-* 可中断线程的简单实现
-
+## 인터럽트
+  
+* 인터럽트 가능한 스레드의 간단한 구현
+  
 ```cpp
 class InterruptFlag {
  public:
@@ -531,9 +532,9 @@ void interruption_point() {
   }
 }
 ```
-
-* 在函数中使用
-
+  
+* 함수에서 사용  
+  
 ```cpp
 void f() {
   while (!done) {
@@ -542,9 +543,9 @@ void f() {
   }
 }
 ```
-
-* 更好的方式是用 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable) 来唤醒，而非在循环中持续运行
-
+  
+* 루프에서 연속적으로 실행하는 대신 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable)을 사용하는 것이 더 좋은 방법이다  
+  
 ```cpp
 class InterruptFlag {
  public:
@@ -584,10 +585,10 @@ void interruptible_wait(std::condition_variable& cv,
                         std::unique_lock<std::mutex>& l) {
   interruption_point();
   this_thread_interrupt_flag.set_condition_variable(cv);
-  // 之后的 wait_for 可能抛异常，所以需要 RAII 清除标志
+  // 나중에 wait_for가 예외를 던질 수 있으므로 RAII는 플래그를 지우는 데 필요하다
   InterruptFlag::ClearConditionVariableOnDestruct guard;
   interruption_point();
-  // 设置线程看到中断前的等待时间上限
+  // 스레드가 인터럽트를 보기 전에 대기할 수 있는 시간 상한을 설정한다
   cv.wait_for(l, std::chrono::milliseconds(1));
   interruption_point();
 }
@@ -605,8 +606,9 @@ void interruptible_wait(std::condition_variable& cv,
 }
 ```
 
-* 和 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable) 不同的是，[std::condition_variable_any](https://en.cppreference.com/w/cpp/thread/condition_variable_any) 可以使用不限于 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 的任何类型的锁，这意味着可以使用自定义的锁类型
-
+* 和 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable) 不同的是，[std::condition_variable_any](https://en.cppreference.com/w/cpp/thread/condition_variable_any) 可以使用不限于 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 的任何类型的锁，这意味着可以使用自定义的锁类型  
+* [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable)과 달리 [std::condition_variable_any](https://en.cppreference.com/w/cpp/thread/condition_variable_any)는 [std::unique_lock](https://en.cppreference.com/w/cpp/thread/unique_lock) 즉 사용자 정의 잠금 유형을 사용할 수 있다  
+  
 ```cpp
 #include <atomic>
 #include <condition_variable>
@@ -670,9 +672,9 @@ void interruptible_wait(std::condition_variable_any& cv, Lockable& l) {
   this_thread_interrupt_flag.wait(cv, l);
 }
 ```
-
-* 对于其他阻塞调用（比如 mutex、future）的中断，一般也可以像对 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable) 一样设置超时时间，因为不访问内部 mutex 或 future 无法在未满足等待的条件时中断等待
-
+  
+* 다른 차단 호출(예: 뮤텍스, 퓨처)을 중단하려면 일반적으로 [std::condition_variable](https://en.cppreference.com/w/cpp/thread/condition_variable)에서와 같이 시간 제한을 설정하면 된다. 내부 뮤텍스나 퓨처에 액세스하지 않으면 대기 조건을 충족하지 않고는 대기를 중단할 수 없기 때문이다  
+  
 ```cpp
 template <typename T>
 void interruptible_wait(std::future<T>& ft) {
@@ -686,22 +688,22 @@ void interruptible_wait(std::future<T>& ft) {
 }
 ```
 
-* 从被中断的线程角度来看，中断就是一个 `thread_interrupted` 异常。因此检查出中断后，可以像异常一样对其进行处理
-
+* 인터럽트는 인터럽트된 스레드의 관점에서 볼 때 `thread_interrupted` 예외이다. 따라서 인터럽트가 감지되면 예외처럼 처리할 수 있다.
+  
 ```cpp
 internal_thread = std::thread{[f, &p] {
   p.set_value(&this_thread_interrupt_flag);
   try {
     f();
   } catch (const thread_interrupted&) {
-    // 异常传入 std::thread 的析构函数时将调用 std::terminate
-    // 为了防止程序终止就要捕获异常
+    // std::terminate 는 예외가 std::thread 의 소멸자에게 전달될 때 호출된다
+    // 예외를 잡아내어 프로그램 종료를 방지한다
   }
 }};
 ```
-
-* 假如有一个桌面搜索程序，除了与用户交互，程序还需要监控文件系统的状态，以识别任何更改并更新其索引。为了避免影响 GUI 的响应性，这个处理通常会交给一个后台线程，后台线程需要运行于程序的整个生命周期。这样的程序通常只在机器关闭时退出，而在其他情况下关闭程序，就需要井然有序地关闭后台线程，一个关闭方式就是中断
-
+  
+* 데스크톱 검색 애플리케이션을 사용하는 경우 애플리케이션은 사용자와 상호 작용하는 것 외에도 파일시스템의 상태를 모니터링하여 변경 사항을 식별하고 색인을 업데이트해야 한다. GUI의 응답성에 영향을 주지 않기 위해 이 처리는 일반적으로 프로그램의 전체 수명 기간 동안 실행되어야 하는 백그라운드 스레드로 넘겨진다. 이러한 프로그램은 일반적으로 컴퓨터가 종료될 때만 종료되며, 다른 상황에서 프로그램을 종료하려면 백그라운드 스레드를 잘 정리된 방식으로 종료해야 하는데 종료하는 한 가지 방법은 백그라운드 스레드를 중단하는 것이다.   
+    
 ```cpp
 std::mutex config_mutex;
 std::vector<InterruptibleThread> background_threads;
@@ -728,16 +730,16 @@ int main() {
   for (auto& x : background_threads) {
     x.interrupt();
   }
-  // 中断所有线程后再join
+  // 모든 스레드를 중단한 다음 다시 join
   for (auto& x : background_threads) {
     if (x.joinable()) {
       x.join();
     }
   }
-  // 不直接在一个循环里中断并 join 的目的是为了并发，
-  // 因为中断不会立即完成，它们必须进入下一个中断点，
-  // 再在退出前必要地调用析构和异常处理的代码，
-  // 如果对每个线程都中断后立即 join，就会造成中断线程的等待，
-  // 即使它还可以做一些有用的工作，比如中断其他线程
+  // 루프에서 인터럽트하고 바로 join 하지 않는 이유는 동시성을 위해서이다
+  // 인터럽트는 즉시 끝나지 않기 때문에 다음 인터럽트 지점으로 이동한 다음
+  // 그리고 종료하기 전에 필요한 소멸자와 예외 처리 코드를 호출해야 한다
+  // 모든 스레드가 중단되었다가 다시 join 하면, 중단된 스레드는 여전히 일부 작업을 수행할 수 있음에도 불구하고 대기한다
+  // 다른 스레드를 중단하는 등 여전히 유용한 작업을 수행할 수 있음에도 불구하고
 }
 ```
