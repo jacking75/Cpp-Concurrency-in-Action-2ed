@@ -1,8 +1,8 @@
-## 线程间的工作划分
+## 스레드 간 작업 분담
 
 * 为了提高线程利用率并最小化开销，必须决定要使用的线程数量，并为每个线程合理分配任务
 
-### 开始处理之前的线程间数据划分
+### 처리 시작 전 스레드 간 데이터 분할
 
 * 简单算法最容易并行化，比如要并行化 [std::for_each](https://en.cppreference.com/w/cpp/algorithm/for_each)，把元素划分到不同的线程上执行即可。如何划分才能获取最优性能，取决于数据结构的细节，这里用一个最简单的划分为例，每 N 个元素分配给一个线程，每个线程不需要与其他线程通信，直到独立完成各自的处理任务
 
@@ -11,7 +11,7 @@
 * 如果使用过 [MPI](https://www.mpi-forum.org/) 或 [OpenMP](https://www.openmp.org/)，会很熟悉这个结构，即把一个任务划分成一系列并行任务，工作线程独立完成任务，最后 reduce 合并结果。不过对 for_each 来说，最后的 reduce 实际不需要执行操作，但对其他需要合并结果的并行算法来说，最后一步很重要
 * 尽管这个技术很强大，但不是万能的，有时数据不能灵活划分，只有在处理数据时划分才明显，最能明显体现这点的就是递归算法，比如快速排序
 
-### 递归划分数据
+### 데이터의 재귀적 분할
 
 * 要并行化快速排序，无法直接划分数据，因为只有处理之后才知道某一项应该置于基数的哪一边。因此，很容易想到的是使用递归，其中的递归调用完全独立，各自处理不同的元素集，十分适合并发执行
 
@@ -136,7 +136,7 @@ std::list<T> parallel_quick_sort(std::list<T> v) {
 }
 ```
 
-### 基于任务划分
+### 작업 기반 세분화
 
 * 如果数据动态生成或来自外部输入，上述划分方式都不适用，此时应该基于任务而非基于数据来划分。一种基于任务的划分方式是让线程针对性处理任务，对同一数据进行不同的操作，而不是都做相同的工作。这样线程是独立的，每个线程只需要负责完成总任务的某一部分。这就是 SoC（separation of concerns，关注点分离）设计原则
 * 单线程中，如果有多个任务需要执行，只能依次执行任务，任务需要保存完成状态，并周期性地返回控制流给主循环。如果循环中添加了很多任务，就会导致程序变慢，对于一个用户发起的事件可能很久才会响应
@@ -163,16 +163,16 @@ std::list<T> parallel_quick_sort(std::list<T> v) {
 
 * 以视频解码为例，每 4 秒 120 帧，第一秒达到 120 帧，卡顿 3 秒后播放下一个 120 帧，这样远不如稳定的每秒 30 帧
 
-## 影响并发代码性能的因素
+## 동시 코드의 성능에 영향을 미치는 요인
 
-### 处理器数量
+### 프로세서 수
 
 * 处理器数量是影响多线程程序性能的首要因素，一个并发程序在不同环境下的表现迥异，而开发者的环境和用户很可能不同，比如开发环境是双核或四核系统，但用户是任意多核或单核，因此必须谨慎考虑可能的影响并对其测试
 * 单个 16 核、4 个四核、16 个单核是近似的，都能并发运行 16 个线程，要利用好这点，开发的程序必须至少用上 16 个线程。如果少于 16 个，就会浪费处理器性能（不考虑系统运行其他程序的情况），另一方面，如果多于 16 个，就会让处理器浪费时间在切换线程上，这种情况就是 oversubscription
 * 使用 [hardware_concurrency](https://en.cppreference.com/w/cpp/thread/thread/hardware_concurrency) 可以获取硬件支持的线程数，但要注意它不会考虑已运行在系统上的其他线程，如果多个线程都用它给出的线程数，就会导致巨大的 oversubscription。这个问题可以抛给 [std::async](https://en.cppreference.com/w/cpp/thread/async)，它会适度处理并安排所有调用。这个问题也能用线程池解决
 * 随着处理器数量增加，另一个影响性能的问题也随之而来，即多处理器尝试访问同一数据
 
-### 乒乓缓存（cache ping-pong）
+### cache ping-pong
 
 * 如果两个线程在不同处理器上并发执行，读取同一数据一般不会带来问题，数据将拷贝到它们的 cache，处理器可以同时处理。但如果一个线程修改数据，这个修改传给其他核的 cache 就需要花费时间，从而可能导致第二个处理器停止以等待改变传到内存硬件（取决于两个线程上的操作和这个操作使用的内存序）。从 CPU 指令的角度来看，这个操作慢到惊人，等价于数百个独立指令（具体取决于硬件的物理结构）
 
@@ -215,7 +215,7 @@ void f() {
 
 * 要避免乒乓缓存，就要尽量减少多个线程对同一内存位置的竞争。但即使一个特定内存位置只能被一个线程访问，仍然可能存在乒乓缓存，原因就是伪共享
 
-### 伪共享（false sharing）
+### false sharing
 
 * 处理器 cache 不是独立的，而是以 cache line 作为最小单位，一般为 32 或 64 字节，因此小数据可能位于同一 cache line。有时这是好事，如果一个线程访问的数据都位于同一 cache line，性能会比分散在多个 cache line 好。但如果 cache line 中的数据项不相关，需要被多个线程访问，就会导致性能问题
 * 假如有一个 int 数组，一组线程频繁访问和更新其中的数据。通常 int 大小不超过一个 cache line，因此一个 cache line 可以存储多个数据项，此时即使每个线程只访问自己需要的数据，cache 硬件也会造成乒乓缓存。比如访问 0 号数据的线程要更新数据，cache line 的所有权就要被转移到运行这个线程的处理器
@@ -235,7 +235,7 @@ void f() {
 * 如果生成的线程数过多的原因是数据划分，可以限制工作线程的数量。如果 oversubscription 是因为自然的工作划分，除了选择其他的划分方式，没有什么直接改善的办法。但选择合适的划分需要对目标平台有更多的了解，只有性能不可接受，而改变划分方式可以明显提高性能时才值得这样做
 * 影响多线程代码性能的因素非常多，以上只是一些有明显可见影响的主要因素，比如乒乓缓存的开销在两个单核处理器和一个双核处理器上区别很大，即使两者有相同的CPU类型和时钟速度
 
-## 适用多线程性能的数据结构
+## 멀티 스레드 성능을 위한 데이터 구조
 
 * 如果有两个上千行列的矩阵相乘，现在要用多线程来优化计算。一般非稀疏矩阵可以用一个大的一维数组表示，矩阵的每行在数组中连续排列。这个计算需要三个数组，其中一个存储计算结果。为了优化性能，就要仔细考虑数据访问模式，尤其是向结果数组的写入
 * 划分方式有很多，如果行列数超过处理器数，每个线程可以计算结果的某些行或列，或者一个子矩阵
@@ -273,11 +273,11 @@ struct Data {
 Data some_array[256];
 ```
 
-## 并发设计的其他注意事项
+## 동시 설계를 위한 기타 고려 사항
 
 * 除了上述问题，设计并发代码时还需要考虑异常安全和可扩展性。如果代码不是异常安全的，就可能导致破坏不变量或 race condition，或由于一个操作抛出异常导致程序意外终止。可扩展性指的是，性能会随着处理器核数的提升而提升，如果处理器核数是之前的 100 倍，则最理想的情况下性能也应该之前的 100 倍
 
-### 并发算法的异常安全
+### 동시 실행 알고리즘의 비정상적인 안전성
 
 * 并行算法比串行算法更注重异常问题。在串行算法中，如果一个操作抛出异常，只需要保证吞下此异常以避免资源泄漏或破坏不变量，它可以愉快地允许异常传播给调用者处理。但在并行算法中，许多操作运行在不同的线程上，异常就不允许传播，因为它在错误的调用栈上。如果新线程上的函数存在异常，程序就会终止
 * 回顾以前提到的并行版本的 [std::accumulate](https://en.cppreference.com/w/cpp/algorithm/accumulate)，它就是非异常安全的，代码可能抛出异常的位置如下
@@ -541,7 +541,7 @@ T parallel_accumulate(Iterator first, Iterator last, T init) {
 }
 ```
 
-### 可扩展性与阿姆达尔定律（Amdahl’s law）
+### Amdahl’s law
 
 * 可扩展性代表了程序对处理器的利用率。单线程程序就是不可扩展的，因为处理器增加完全不能提高单线程程序的性能。对于多线程程序，线程经常需要花费时间等待（等待其他线程、获取 mutex、修改条件变量、完成 I/O 操作......），一种简化看待多线程程序的方式是将其分为串行和并行部分，由此可以得到如下公式，即阿姆达尔定律
 
@@ -550,12 +550,12 @@ S = 1 / (a + ( 1 - a ) / N) // a 为串行部分占比，N 为处理器倍数，
 // 正常情况下 S < 1 / a，最理想的情况是 a 为 0，S = N
 ```
 
-### 用多线程隐藏延迟（lantency）
+### lantency
 
 * 如果在线程等待期间让系统做一些有用的事，就相当于隐藏了等待。如果只有和处理器单元一样多的线程，阻塞就意味着浪费 CPU 时间，因此可以利用这个时间去运行额外的线程。比如一个用 pipeline 划分工作的病毒扫描程序，一个线程检索文件系统并将文件放入队列，这是一个费时的 I/O 操作，因此同时可以让另一线程从队列获取文件名，加载并扫描文件
 * 利用空闲的 CPU 时间也可能不需要运行额外的线程。比如，如果一个线程因为等待 I/O 操作而阻塞，使用异步 I/O 就是合理的，当 I/O 操作异步运行在后台时，线程就能做有用的工作。又比如，一个线程等待另一线程执行一个操作时，与其阻塞，不如自己执行操作（如lock-free queue）。更极端的例子是，如果线程等待一个未被任何线程启动的任务完成，这个线程可能自己执行此任务，或执行另一个未完成的任务
 
-### 用并发提高响应度（responsiveness）
+### responsiveness
 
 * 添加线程不一定是为了确保使用所有可用的处理器，有时是为了确保及时处理外部事件，以提高系统响应度。现代 GUI 框架大多是事件驱动的，为了确保处理所有事件和消息，GUI 程序一般包含一个如下循环
 
@@ -615,11 +615,11 @@ void process(const event_data& event) {
 }
 ```
 
-## 实践
+## 실천
 
 * 下面为标准库的三个算法实现并行版本，这些实现仅是为了阐述技术的运用，而不是最先进高效的实现。更先进的实现可以在学术文献或专业的多线程库（如 [Intel 的 Threading Building Blocks](https://github.com/intel/tbb)） 中找到
 
-### 并行版 [std::for_each](https://en.cppreference.com/w/cpp/algorithm/for_each)
+### [std::for_each](https://en.cppreference.com/w/cpp/algorithm/for_each)
 
 * [std::for_each](https://en.cppreference.com/w/cpp/algorithm/for_each) 会按顺序依次作用于每个元素，而并行版不保证顺序，元素最好被并发处理，为此需要把元素划分给每个线程。实际上，并行版 [std::for_each](https://en.cppreference.com/w/cpp/algorithm/for_each) 与并行版 [std::accumulate](https://en.cppreference.com/w/cpp/algorithm/accumulate)的实现思路基本一样：使用 [hardware_concurrency](https://en.cppreference.com/w/cpp/thread/thread/hardware_concurrency) 决定线程数，使用连续数据块避免伪共享，使用 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 和 [std::future](https://en.cppreference.com/w/cpp/thread/future) 在线程间传递异常
 
@@ -685,7 +685,7 @@ void parallel_for_each(Iterator first, Iterator last, Func f) {
 }
 ```
 
-### 并行版 [std::find](https://en.cppreference.com/w/cpp/algorithm/find)
+### [std::find](https://en.cppreference.com/w/cpp/algorithm/find)
 
 * [std::find](https://en.cppreference.com/w/cpp/algorithm/find) 的不同之处在于，只要找到目标值就应该停止继续查找。在并行版本中，一个线程找到了值，不仅自身要停止继续查找，还应该通知其他线程停止，这点可以使用一个原子变量作为标记来实现
 * 有两种可选方式来返回值和传播异常，一是使用 [std::future](https://en.cppreference.com/w/cpp/thread/future) 数组和 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 将返回值和异常交给主线程处理，二是使用 [std::promise](https://en.cppreference.com/w/cpp/thread/promise) 直接设置最终结果。如果想在首个异常上终止（即使没有处理完所有元素）则使用 [std::promise](https://en.cppreference.com/w/cpp/thread/promise)，如果想让其他线程继续搜索则使用 [std::packaged_task](https://en.cppreference.com/w/cpp/thread/packaged_task) 保存所有异常，并在没有找到目标值时重新抛出其中一个异常。这里选择使用行为更接近 [std::find](https://en.cppreference.com/w/cpp/algorithm/find) 的 [std::promise](https://en.cppreference.com/w/cpp/thread/promise)
@@ -794,7 +794,7 @@ Iterator parallel_find(Iterator first, Iterator last, T match) {
 }
 ```
 
-### 并行版 [std::partial_sum](https://en.cppreference.com/w/cpp/algorithm/partial_sum)
+### [std::partial_sum](https://en.cppreference.com/w/cpp/algorithm/partial_sum)
 
 * [std::partial_sum](https://en.cppreference.com/w/cpp/algorithm/partial_sum) 会依次累加元素的和（默认是加，也可以是其他二元操作）
 
